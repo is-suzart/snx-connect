@@ -1,0 +1,54 @@
+# Spanish translations for PACKAGE package.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-06-14 12:47-0300\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: Spanish <LL@li.org>\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: main.py:47
+msgid "Delete"
+msgstr "Eliminar"
+
+#: main.py:84
+msgid "Enter a new item..."
+msgstr "Ingrese un nuevo elemento..."
+
+#: main.py:88
+msgid "Add"
+msgstr "Añadir"
+
+#: main.py:145
+msgid "Site"
+msgstr "Sitio web"
+
+#: main.py:150
+msgid "User"
+msgstr "Usuario"
+
+#: main.py:155
+msgid "Password"
+msgstr "Contraseña"
+
+#: main.py:157
+msgid "Type Password"
+msgstr "Escriba la contraseña"
+
+#: main.py:161
+msgid "Keep Info"
+msgstr "Mantener información"
+
+#: main.py:169
+msgid "Connect"
+msgstr "Conectar"
