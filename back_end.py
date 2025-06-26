@@ -4,7 +4,12 @@ import json
 import threading
 import os
 import logging
+import gi
+gi.require_version('Gtk', '4.0')
+gi.require_version('Adw', '1')
 from gi.repository import GLib, Gtk, Adw, Gio, GObject
+import shutil
+import sys # Também será útil
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -13,49 +18,108 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-class Utils:
+class CheckDependencies:
+    """Classe para verificar e instalar dependências como o SNX."""
     def __init__(self):
-        # Define o caminho do arquivo de configuração no diretório de configuração do usuário
+        self.logger = logging.getLogger(self.__class__.__name__)
+
+    def check_snx_exists(self):
+        """
+        Verifica se o comando 'snx' está disponível no sistema usando shutil.which.
+        Retorna True se o comando existir, False caso contrário.
+        """
+        if shutil.which("snx"):
+            self.logger.info("Dependência 'snx' encontrada.")
+            return True
+        else:
+            self.logger.warning("Dependência 'snx' NÃO encontrada.")
+            return False
+
+    def begin_install_snx(self, on_success, on_error):
+        """Inicia a instalação do SNX em uma thread separada."""
+        thread = threading.Thread(target=self._install_snx_thread, args=(on_success, on_error))
+        thread.daemon = True
+        thread.start()
+
+    def _install_snx_thread(self, on_success, on_error):
+        """
+        Tenta instalar o cliente SNX. Este método roda em uma thread.
+        """
+        self.logger.info("Tentando instalar o SNX via script local...")
+        try:
+            # --- CORREÇÃO CRÍTICA AQUI ---
+            # Cada parte do comando é um item separado na lista.
+            # Presume que o script está na pasta 'bin' relativa à execução.
+            dirname = os.path.dirname(__file__)
+            script_path = "bin/snx_install_linux30.sh"
+            filename = os.path.join(dirname, script_path)
+            print(filename)
+            
+            
+            # Verifica se o script existe antes de tentar rodar
+            if not os.path.exists(filename):
+                self.logger.error(f"Script de instalação não encontrado em: {script_path}")
+                GLib.idle_add(on_error, "O script de instalação (snx_install_linux30.sh) não foi encontrado.")
+                return
+
+            process = subprocess.run(
+                ["pkexec", "sh", filename], 
+                check=True,
+                capture_output=True, # Captura a saída para melhor logging
+                text=True
+            )
+            self.logger.info(f"Script de instalação do SNX executado com sucesso. Saída: {process.stdout}")
+            GLib.idle_add(on_success, "Instalação concluída com sucesso! Por favor, reinicie o aplicativo.")
+
+        except FileNotFoundError:
+            self.logger.error("Erro: 'pkexec' não encontrado. É necessário para obter permissões de administrador.")
+            GLib.idle_add(on_error, "O comando 'pkexec' não foi encontrado. Não é possível pedir permissão para instalar.")
+        except subprocess.CalledProcessError as e:
+            # Acontece se o usuário cancelar a senha do pkexec ou se o script falhar
+            self.logger.error(f"Erro ao executar o script de instalação do SNX: {e.stderr}")
+            GLib.idle_add(on_error, f"A instalação falhou ou foi cancelada.\n\nDetalhe: {e.stderr}")
+        except Exception as e:
+            self.logger.exception("Erro inesperado durante a instalação do SNX.")
+            GLib.idle_add(on_error, f"Ocorreu um erro inesperado: {e}")
+
+
+class Utils:
+    """Funções de utilidade para ler/escrever JSON."""
+    def __init__(self):
+        """Define o caminho do arquivo de configuração."""
         config_dir = os.path.join(GLib.get_user_config_dir(), "snx-connect")
-        os.makedirs(config_dir, exist_ok=True) # Cria o diretório se não existir
+        os.makedirs(config_dir, exist_ok=True)
         self.config_file = os.path.join(config_dir, "snx-data.json")
 
     def readJson(self):
+        """Lê o arquivo de configuração JSON."""
         try:
             with open(self.config_file, "r") as file:
                 return json.load(file)
         except (FileNotFoundError, json.JSONDecodeError):
-            # Se o arquivo não existe ou está corrompido/vazio, retorna um dicionário vazio.
             return {}
 
     def writeJson(self, changes):
+        """Escreve no arquivo de configuração JSON."""
         with open(self.config_file, "w") as file:
             json.dump(changes, file, indent=4)
 
-    def extract_addresses(self, nslookup_output_lines, desired_prefix=None):
-        """
-        Extracts IP addresses from nslookup output lines.
-        Filters by desired_prefix if provided.
-        Attempts to ignore DNS server's own address by looking for "Name:" -> "Address:" patterns.
-        Returns a list of unique IP addresses.
-        """
-        resolved_ips = set() # Use um conjunto para lidar automaticamente com duplicatas
-        # Regex para encontrar linhas como "Address: <ip_address>"
+    def extract_addresses(self, nslookup_output_lines):
+        """Extrai endereços IP da saída do nslookup."""
+        resolved_ips = set()
         address_pattern = re.compile(r"^\s*Address:\s*([0-9a-fA-F.:]+)")
-
         for i, line_content in enumerate(nslookup_output_lines):
-            # Procuramos por uma linha "Name:" seguida por uma linha "Address:"
             if line_content.lstrip().startswith("Name:"):
-                if i + 1 < len(nslookup_output_lines): # Verifica se existe uma próxima linha
+                if i + 1 < len(nslookup_output_lines):
                     next_line = nslookup_output_lines[i+1]
                     match = address_pattern.match(next_line)
                     if match:
                         ip = match.group(1)
-                        if ":" not in ip:  # Verifica se NÃO é um endereço IPv6 (para pegar IPv4)
+                        if ":" not in ip:
                             resolved_ips.add(ip)
-        return list(resolved_ips) # Retorna uma lista de IPs únicos
-
-
+        return list(resolved_ips)
+    
+        
 class VpnCon:
     def __init__(self, server, username, password, keepinfo):
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -399,3 +463,4 @@ class VpnDiss:
 
 
 # main()
+

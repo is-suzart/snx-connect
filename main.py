@@ -2,12 +2,13 @@ import sys
 import gi
 import gettext
 import locale
-from back_end import Utils, VpnCon, VpnConWeb, VpnDiss
+from back_end import Utils, VpnCon, VpnConWeb, VpnDiss, CheckDependencies
 
 # Requer as versões necessárias do Gtk e Adw
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gio, GObject
+
 
 # --- Configuração da Tradução ---
 LOCALE_DIR = "i18n"
@@ -158,9 +159,16 @@ class TelaLogin(Gtk.Box):
     __gsignals__ = { 'login-sucesso': (GObject.SignalFlags.RUN_FIRST, None, (str,)) }
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        self.utils = Utils(); data = self.utils.readJson(); self.isChecked = data.get("keepinfo", False); self.last_office_ip = None
-        self.set_margin_top(24); self.set_margin_bottom(24); self.set_margin_start(24); self.set_margin_end(24)
-        project_logo = Gtk.Image.new_from_file("./assets/logo.png"); project_logo.set_pixel_size(150)
+        self.utils = Utils()
+        data = self.utils.readJson()
+        self.isChecked = data.get("keepinfo", False) 
+        self.last_office_ip = None
+        self.set_margin_top(24)
+        self.set_margin_bottom(24)
+        self.set_margin_start(24)
+        self.set_margin_end(24)
+        project_logo = Gtk.Image.new_from_file("./assets/logo.png")
+        project_logo.set_pixel_size(150)
         self.entrada_website = Gtk.Entry(placeholder_text=_("Site address"))
         self.entrada_usuario = Gtk.Entry(placeholder_text=_("Your username"))
         self.entrada_senha = Gtk.Entry(placeholder_text=_("Password"), visibility=False, input_purpose=Gtk.InputPurpose.PASSWORD)
@@ -250,12 +258,52 @@ class SNXConnectApp(Adw.Application):
     def __init__(self, **kwargs):
         super().__init__(**kwargs, application_id="com.exemplo.SNXConnect")
         self.connect('activate', self.on_activate)
+        
 
     def on_activate(self, app):
         win = JanelaPrincipal(application=app)
         win.present()
+        self.check = CheckDependencies()
+
+        def on_success(arg):
+            print("already installed")
+            print(arg)
+        
+        def on_error(arg):
+            print(arg)
+            dialog = Adw.MessageDialog(transient_for=win, title=_("Dependencies Missing"), body=_("Please install the required dependencies."))
+            dialog.add_response("ok", _("OK"))
+            dialog.set_response_appearance("ok", Adw.ResponseAppearance.DESTRUCTIVE)
+            dialog.connect("response", lambda d, r: d.close())
+            dialog.present()
+            return
+        
+        def on_install_dialog_response(d,response_id):
+            if response_id == 'install':
+                self.check.begin_install_snx(on_success,on_error)
+            
+            d.close()
+            
+            
+        if not self.check.check_snx_exists():
+            dialog = Adw.MessageDialog(transient_for=win, title=_("Dependencies Missing"), body=_("Please install the required dependencies."))
+            # Botão 1: Instalar (ação sugerida, em azul)
+            dialog.add_response("install", _("Instalar"))
+            dialog.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)
+
+            # Botão 2: Cancelar (ação destrutiva ou padrão)
+            dialog.add_response("cancel", _("Cancelar"))
+            # Opcional: Se quiser que o botão de cancelar seja vermelho.
+            dialog.set_response_appearance("cancel", Adw.ResponseAppearance.DESTRUCTIVE)
+
+            # Conecte a UMA função que vai lidar com a resposta
+            dialog.connect("response", on_install_dialog_response)
+            dialog.present()
+            #self.check.begin_install_snx(on_success,on_error)
 
 if __name__ == "__main__":
     app = SNXConnectApp()
+
+        
     exit_status = app.run(sys.argv)
     sys.exit(exit_status)
