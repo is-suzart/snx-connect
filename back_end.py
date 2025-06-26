@@ -2,6 +2,7 @@ import subprocess
 import re
 import json
 import threading
+import os
 import logging
 from gi.repository import GLib, Gtk, Adw, Gio, GObject
 
@@ -14,14 +15,21 @@ logging.basicConfig(
 
 class Utils:
     def __init__(self):
-        pass
+        # Define o caminho do arquivo de configuração no diretório de configuração do usuário
+        config_dir = os.path.join(GLib.get_user_config_dir(), "snx-connect")
+        os.makedirs(config_dir, exist_ok=True) # Cria o diretório se não existir
+        self.config_file = os.path.join(config_dir, "snx-data.json")
 
     def readJson(self):
-        with open("snx-data.json", "r") as file:
-            return json.load(file)
+        try:
+            with open(self.config_file, "r") as file:
+                return json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            # Se o arquivo não existe ou está corrompido/vazio, retorna um dicionário vazio.
+            return {}
 
     def writeJson(self, changes):
-        with open("snx-data.json", "w") as file:
+        with open(self.config_file, "w") as file:
             json.dump(changes, file, indent=4)
 
     def extract_addresses(self, nslookup_output_lines, desired_prefix=None):
@@ -61,10 +69,7 @@ class VpnCon:
 
         if self.keepinfo:
             # Se keepinfo for True, salva as informações no JSON
-            try:
-                data_to_save = self.utils.readJson()
-            except (FileNotFoundError, json.JSONDecodeError):
-                data_to_save = {} # Start with an empty dict if file not found or corrupt
+            data_to_save = self.utils.readJson()
             data_to_save["server"] = self.server
             data_to_save["username"] = self.username
             data_to_save["password"] = self.password
@@ -76,16 +81,12 @@ class VpnCon:
                 self.logger.error(f"Error writing credentials to snx-data.json: {e}")
 
         # Check 'keepAddress' flag from JSON to decide if routes should be auto-added on connect
-        try:
-            current_json_data = self.utils.readJson()
-            if current_json_data.get("keepAddress", False):
-                self.should_auto_add_routes_on_connect = True
-                self.logger.info("VpnCon initialized: 'keepAddress' is true. Routes will be auto-added on successful connection.")
-            else:
-                self.logger.info("VpnCon initialized: 'keepAddress' is false or not set. Routes will not be auto-added.")
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            self.logger.warning(f"Could not read or parse snx-data.json in VpnCon.__init__: {e}. 'keepAddress' functionality may be affected.")
-            # self.should_auto_add_routes_on_connect remains False, which is a safe default
+        current_json_data = self.utils.readJson()
+        if current_json_data.get("keepAddress", False):
+            self.should_auto_add_routes_on_connect = True
+            self.logger.info("VpnCon initialized: 'keepAddress' is true. Routes will be auto-added on successful connection.")
+        else:
+            self.logger.info("VpnCon initialized: 'keepAddress' is false or not set. Routes will not be auto-added.")
 
     def _auto_add_saved_routes(self):
         """
@@ -97,12 +98,7 @@ class VpnCon:
             self.logger.error("Office Mode IP not available for auto-adding routes.")
             return
 
-        try:
-            json_data_routes = self.utils.readJson()
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            self.logger.error(f"Could not read or parse snx-data.json in _auto_add_saved_routes: {e}. Cannot auto-add routes.", exc_info=True)
-            return
-        
+        json_data_routes = self.utils.readJson()
         commands_to_run = []
         found_routes_to_add = False
 
@@ -179,10 +175,7 @@ class VpnCon:
                     self.logger.info(f"Office Mode IP obtained: {self.office_mode_ip}")
                     
                     # Update JSON with the new IP
-                    try:
-                        data_for_ip_update = self.utils.readJson()
-                    except (FileNotFoundError, json.JSONDecodeError):
-                        data_for_ip_update = {} # Start fresh if problematic
+                    data_for_ip_update = self.utils.readJson()
                     data_for_ip_update["ip"] = self.office_mode_ip
                     try:
                         self.utils.writeJson(data_for_ip_update)
@@ -311,83 +304,10 @@ class VpnDiss:
                                     "This might be normal if already disconnected.")
 
             # Optional: Disable IPv6 (Consider if this is always necessary on disconnect)
-            # try:
-            #     self.logger.info("Attempting to disable IPv6 via pkexec sysctl.")
-            #     subprocess.run(["pkexec", "sysctl", "-w", "net.ipv6.conf.all.disable_ipv6=1"], check=True, capture_output=True, text=True)
-            #     self.logger.info("Successfully disabled IPv6 via pkexec sysctl.")
-            # except subprocess.CalledProcessError as e_sysctl:
-            #     self.logger.error(f"Failed to disable IPv6 via pkexec sysctl. Error: {e_sysctl.stderr or e_sysctl.stdout or str(e_sysctl)}")
-            # except FileNotFoundError:
-            #     self.logger.error("pkexec or sysctl command not found for disabling IPv6.")
-
-            # Delete routes previously added
-            current_data_for_routes = {}
-            try:
-                current_data_for_routes = self.utils.readJson()
-                office_ip_for_deletion = current_data_for_routes.get("ip")
-                route_deletion_commands = []
-
-                if office_ip_for_deletion:
-                    for key, value in current_data_for_routes.items():
-                        if key.endswith("Address") and isinstance(value, list):
-                            domain_name = key.replace("Address", "")
-                            for addr in value:
-                                # Assuming 'tunsnx' is the device. This might need to be confirmed or made dynamic.
-                                route_deletion_commands.append(f"ip route del {addr} via {office_ip_for_deletion} dev tunsnx")
-                            if value:
-                                self.logger.info(f"Scheduled deletion of routes for {domain_name} (IPs: {value}) via {office_ip_for_deletion}")
-                else:
-                    self.logger.warning("No 'ip' found in snx-data.json; cannot specifically delete routes via VPN gateway.")
-
-                if route_deletion_commands:
-                    script = "\n".join(route_deletion_commands)
-                    self.logger.info(f"Executing route deletion script with pkexec:\n{script}")
-                    pk_proc = subprocess.Popen(["pkexec", "bash"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    s_out, s_err = pk_proc.communicate(input=script)
-                    if pk_proc.returncode == 0:
-                        self.logger.info("Route deletion script executed successfully via pkexec.")
-                        if s_out.strip(): self.logger.debug(f"pkexec stdout for route deletion: {s_out.strip()}")
-                    else:
-                        self.logger.error(f"Route deletion script via pkexec failed. RC: {pk_proc.returncode}. Stderr: {s_err.strip()}")
-                else:
-                    self.logger.info("No routes found to delete or no VPN IP was available for deletion commands.")
-
-            except (FileNotFoundError, json.JSONDecodeError) as e_json_routes:
-                self.logger.error(f"Error reading snx-data.json for route deletion: {e_json_routes}", exc_info=True)
-            except Exception as e_route_del_logic:
-                self.logger.error(f"Unexpected error during route deletion logic: {e_route_del_logic}", exc_info=True)
+            self._delete_saved_routes()
 
             # Update snx-data.json based on keepinfo and keepAddress
-            try:
-                # Re-read in case it was modified or to ensure fresh state
-                data_before_final_write = self.utils.readJson()
-                final_data_to_write = {}
-
-                if data_before_final_write.get("keepinfo", False):
-                    self.logger.info("'keepinfo' is true. Preserving server, username, password, and keepinfo flag.")
-                    final_data_to_write["server"] = data_before_final_write.get("server")
-                    final_data_to_write["username"] = data_before_final_write.get("username")
-                    final_data_to_write["password"] = data_before_final_write.get("password")
-                    final_data_to_write["keepinfo"] = True
-
-                    if data_before_final_write.get("keepAddress", False):
-                        self.logger.info("'keepAddress' is also true. Preserving *Address entries and keepAddress flag.")
-                        final_data_to_write["keepAddress"] = True
-                        for key, value in data_before_final_write.items():
-                            if key.endswith("Address"):
-                                final_data_to_write[key] = value
-                    else:
-                        self.logger.info("'keepAddress' is false (while 'keepinfo' is true). Route addresses and keepAddress flag will not be preserved.")
-                else:
-                    self.logger.info("'keepinfo' is false. Clearing all persistent data (server, user, pass, keepinfo, keepAddress, routes).")
-                
-                # 'ip' field is always removed on disconnect, regardless of flags.
-                self.utils.writeJson(final_data_to_write)
-                self.logger.info(f"snx-data.json updated after disconnect. Final data written: {final_data_to_write}")
-            except (FileNotFoundError, json.JSONDecodeError) as e_json_final:
-                self.logger.error(f"Failed to read/parse snx-data.json for final update: {e_json_final}", exc_info=True)
-            except Exception as e_final_update_logic:
-                self.logger.error(f"Error during final update logic of snx-data.json: {e_final_update_logic}", exc_info=True)
+            self._update_json_on_disconnect()
 
             if on_success:
                 GLib.idle_add(on_success, "VPN disconnection process completed.")
@@ -396,6 +316,70 @@ class VpnDiss:
             self.logger.exception("An critical error occurred during the VPN disconnection process.")
             if on_error:
                 GLib.idle_add(on_error, f"Disconnection failed critically: {str(e)}")
+
+    def _delete_saved_routes(self):
+        """Lê o arquivo JSON e tenta remover todas as rotas salvas."""
+        try:
+            current_data_for_routes = self.utils.readJson()
+            office_ip_for_deletion = current_data_for_routes.get("ip")
+            route_deletion_commands = []
+
+            if office_ip_for_deletion:
+                for key, value in current_data_for_routes.items():
+                    if key.endswith("Address") and isinstance(value, list):
+                        domain_name = key.replace("Address", "")
+                        for addr in value:
+                            # Assuming 'tunsnx' is the device. This might need to be confirmed or made dynamic.
+                            route_deletion_commands.append(f"ip route del {addr} via {office_ip_for_deletion} dev tunsnx")
+                        if value:
+                            self.logger.info(f"Scheduled deletion of routes for {domain_name} (IPs: {value}) via {office_ip_for_deletion}")
+            else:
+                self.logger.warning("No 'ip' found in snx-data.json; cannot specifically delete routes via VPN gateway.")
+
+            if route_deletion_commands:
+                script = "\n".join(route_deletion_commands)
+                self.logger.info(f"Executing route deletion script with pkexec:\n{script}")
+                pk_proc = subprocess.Popen(["pkexec", "bash"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                s_out, s_err = pk_proc.communicate(input=script)
+                if pk_proc.returncode == 0:
+                    self.logger.info("Route deletion script executed successfully via pkexec.")
+                    if s_out.strip(): self.logger.debug(f"pkexec stdout for route deletion: {s_out.strip()}")
+                else:
+                    self.logger.error(f"Route deletion script via pkexec failed. RC: {pk_proc.returncode}. Stderr: {s_err.strip()}")
+            else:
+                self.logger.info("No routes found to delete or no VPN IP was available for deletion commands.")
+        except Exception as e_route_del_logic:
+            self.logger.error(f"Unexpected error during route deletion logic: {e_route_del_logic}", exc_info=True)
+
+    def _update_json_on_disconnect(self):
+        """Atualiza o arquivo JSON com base nas flags 'keepinfo' e 'keepAddress'."""
+        try:
+            data_before_final_write = self.utils.readJson()
+            final_data_to_write = {}
+
+            if data_before_final_write.get("keepinfo", False):
+                self.logger.info("'keepinfo' is true. Preserving server, username, password, and keepinfo flag.")
+                final_data_to_write["server"] = data_before_final_write.get("server")
+                final_data_to_write["username"] = data_before_final_write.get("username")
+                final_data_to_write["password"] = data_before_final_write.get("password")
+                final_data_to_write["keepinfo"] = True
+
+                if data_before_final_write.get("keepAddress", False):
+                    self.logger.info("'keepAddress' is also true. Preserving *Address entries and keepAddress flag.")
+                    final_data_to_write["keepAddress"] = True
+                    for key, value in data_before_final_write.items():
+                        if key.endswith("Address"):
+                            final_data_to_write[key] = value
+                else:
+                    self.logger.info("'keepAddress' is false (while 'keepinfo' is true). Route addresses and keepAddress flag will not be preserved.")
+            else:
+                self.logger.info("'keepinfo' is false. Clearing all persistent data (server, user, pass, keepinfo, keepAddress, routes).")
+            
+            # 'ip' field is always removed on disconnect, regardless of flags.
+            self.utils.writeJson(final_data_to_write)
+            self.logger.info(f"snx-data.json updated after disconnect. Final data written: {final_data_to_write}")
+        except Exception as e_final_update_logic:
+            self.logger.error(f"Error during final update logic of snx-data.json: {e_final_update_logic}", exc_info=True)
 
 # --- Main function (commented out, for command-line use if ever needed) ---
 #     parser = argparse.ArgumentParser(description='Lidando com a VPN SNX')
