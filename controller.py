@@ -1,80 +1,98 @@
-from back_end import Utils, VpnCon,VpnConWeb, VpnDiss
-import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
-from gi.repository import GLib, Gtk, Adw, Gio, GObject
-from main import TelaPrincipal
+# controller.py
+import threading
+import logging
 
+# Importa as exceções customizadas do nosso Model para um tratamento de erro limpo
+from back_end import VpnError 
 
 class Controller:
-    def __init__(self, model, view):
-        self.model = model
-        self.view = view
-        self.utils = Utils()
-        self.vpn_web = VpnConWeb()
-        
-        self.login_infos = {}
-        
-    def load_saved_routes(self):
-        data = self.utils.readJson()
-        for key, value in data.items():
-            # Garante que a chave termina com "Address" E que o valor é uma lista
-            if key.endswith("Address") and isinstance(value, list):
-                domain = key.replace("Address", "")
-                for addr in value: # Agora 'value' é garantidamente uma lista
-                    self.add_route_to_list(domain, addr)
-    
-    def get_user_login_info(self,website,name, password,keep):
-        self.login_infos = {
-            "website": website,
-            "name": name,
-            "password": password,
-            "keep": keep
-        }
-        return self.login_infos
-        
-    
-    def connect_user(self, on_success, on_error):
-        if not self.login_infos:
-            GLib.idle_add(on_error, "Informações de login não fornecidas.")
-            return
-        else:
-            vpn = VpnCon(
-                self.login_infos["website"],
-                self.login_infos["name"],
-                self.login_infos["password"],
-                self.login_infos["keep"]
-            )
-            result = vpn.connect()
-            if result.get("status", False):
-                GLib.idle_add(on_success, result.get("message"), result.get("office_mode_ip"))
-            else:
-                GLib.idle_add(on_error, result.get("message"))
-            
-    
-    def add_route_to_list(self, domain,on_success, on_error):
-        result = self.vpn_web.add_route(domain,on_success, on_error)
-        if result & result.get("status", False):
-            GLib.idle_add(on_success, result.get("message"))
-        else:
-            GLib.idle_add(on_error, result.get("message"))
-    
-    def return_install_snx_status(self,status,msg):
-        if status:
-            print(msg)
-        else:
-            print(f"Error: {msg}")
-            GLib.idle_add(self.view.display_error_message, msg)
-    
-    def disconnect_user(self, on_success, on_error):
-        vpn = VpnDiss()
-        result = vpn.disconnect()
-        if result.get("status", False):
-            GLib.idle_add(on_success, result.get("message"))
-        else:
-            GLib.idle_add(on_error, result.get("message"))
-    
-        
+    """
+    The Controller layer in the MVC architecture.
+    Its responsibilities are:
+    1. Receive user actions from the View.
+    2. Orchestrate long-running tasks in background threads.
+    3. Call the Model to perform business logic.
+    4. Use callbacks to inform the View of the result.
+    It is completely decoupled from the UI framework (no GTK/GLib imports).
+    """
+    def __init__(self, model):
+        """
+        Initializes the Controller with its dependencies (the Model).
+        This is called Dependency Injection.
+        """
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.model = model["manager"] # Recebe a instância do VpnManager
 
-    def run(self):
-        self.view.display_welcome_message()
+    def _run_in_thread(self, target, on_success, on_error, *args):
+        """Helper function to run a model method in a background thread."""
+        def worker():
+            try:
+                # Chama o método síncrono do Model
+                result = target(*args)
+                # Em caso de sucesso, chama o callback de sucesso com o resultado
+                if on_success:
+                    # Desempacota o dicionário de resultado para os callbacks
+                    on_success(**result)
+            except VpnError as e:
+                # Em caso de erro, chama o callback de erro com a mensagem da exceção
+                self.logger.error(f"An error occurred in the worker thread: {e}")
+                if on_error:
+                    on_error(str(e))
+        
+        thread = threading.Thread(target=worker)
+        thread.daemon = True
+        thread.start()
+
+    # --- Public API for the View ---
+
+    def request_login(self, login_info, on_success, on_error):
+        """Handles the user's request to log in."""
+        self.logger.info(f"Login requested for user: {login_info['name']}")
+        self._run_in_thread(
+            self.model.connect,
+            on_success,
+            on_error,
+            login_info["website"],
+            login_info["name"],
+            login_info["password"],
+            login_info["keep"]
+        )
+
+    def request_disconnect(self, on_success, on_error):
+        """Handles the user's request to disconnect."""
+        self.logger.info("Disconnect requested.")
+        self._run_in_thread(self.model.disconnect, on_success, on_error)
+
+    def request_load_routes(self, view):
+        """
+        Handles the request to load saved routes into the view.
+        This is a synchronous call as it should be fast.
+        """
+        self.logger.info("Loading saved routes for the view.")
+        try:
+            routes = self.model.get_saved_routes()
+            for route in routes:
+                # O Controller comanda a View para se atualizar
+                view.add_route_to_list(route["domain"], route["ip"])
+        except VpnError as e:
+            self.logger.error(f"Failed to load routes: {e}")
+            view.show_error_dialog("Error Loading Routes", str(e))
+            
+    def request_add_route(self, domain, on_success, on_error):
+        """Handles the user's request to add a new route."""
+        self.logger.info(f"Route addition requested for domain: {domain}")
+        self._run_in_thread(self.model.add_route, on_success, on_error, domain)
+
+    def request_remove_route(self, domain, ip_address, on_success, on_error):
+        """Handles the user's request to remove a route."""
+        self.logger.info(f"Route removal requested for: {domain} ({ip_address})")
+        self._run_in_thread(self.model.remove_route, on_success, on_error, domain, ip_address)
+
+    def check_dependencies(self):
+        """Synchronously checks for system dependencies."""
+        return self.model.check_dependencies()
+
+    def request_install_snx(self, on_success, on_error):
+        """Handles the request to install SNX."""
+        self.logger.info("SNX installation requested.")
+        self._run_in_thread(self.model.install_snx, on_success, on_error)

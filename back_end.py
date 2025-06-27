@@ -1,494 +1,284 @@
+# back_end.py
 import subprocess
 import re
 import json
-import threading
 import os
 import logging
-import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
-from gi.repository import GLib, Gtk, Adw, Gio, GObject
 import shutil
 import pexpect
-import sys # Também será útil
-from controller import Controller
+import sys
 
-# --- Logging Configuration ---
-logging.basicConfig(
-    level=logging.INFO,  # Set to logging.DEBUG for more verbose output
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+# --- Exceções Customizadas ---
+# É uma boa prática criar exceções específicas para o seu domínio.
+# Isso torna o tratamento de erros no Controller muito mais claro.
+class VpnError(Exception):
+    """Base exception for all VPN related errors."""
+    pass
 
-class CheckDependencies:
-    """Classe para verificar e instalar dependências como o SNX."""
-    def __init__(self):
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.control = Controller
+class ConnectionError(VpnError):
+    """Raised for errors during the connection process."""
+    pass
 
-    def check_snx_exists(self):
-        """
-        Verifica se o comando 'snx' está disponível no sistema usando shutil.which.
-        Retorna True se o comando existir, False caso contrário.
-        """
-        if shutil.which("snx"):
-            self.logger.info("Dependência 'snx' encontrada.")
-            return True
-        else:
-            self.logger.warning("Dependência 'snx' NÃO encontrada.")
-            return False
+class DisconnectionError(VpnError):
+    """Raised for errors during the disconnection process."""
+    pass
 
-    def begin_install_snx(self, on_success, on_error):
-        """Inicia a instalação do SNX em uma thread separada."""
-        thread = threading.Thread(target=self._install_snx_thread, args=(on_success, on_error))
-        thread.daemon = True
-        thread.start()
+class RouteError(VpnError):
+    """Raised for errors related to managing routes."""
+    pass
 
-    def _install_snx_thread(self, on_success, on_error):
-        """
-        Tenta instalar o cliente SNX. Este método roda em uma thread.
-        """
-        self.logger.info("Tentando instalar o SNX via script local...")
-        try:
-            # --- CORREÇÃO CRÍTICA AQUI ---
-            # Cada parte do comando é um item separado na lista.
-            # Presume que o script está na pasta 'bin' relativa à execução.
-            dirname = os.path.dirname(__file__)
-            script_path = "bin/snx_install_linux30.sh"
-            filename = os.path.join(dirname, script_path)
-            print(filename)
-            
-            
-            # Verifica se o script existe antes de tentar rodar
-            if not os.path.exists(filename):
-                self.logger.error(f"Script de instalação não encontrado em: {script_path}")
-                self.control.return_install_snx_status(False, "O script de instalação (snx_install_linux30.sh) não foi encontrado.")
-                #GLib.idle_add(on_error, "O script de instalação (snx_install_linux30.sh) não foi encontrado.")
-                return
+class DependencyError(VpnError):
+    """Raised for errors related to system dependencies."""
+    pass
 
-            process = subprocess.run(
-                ["pkexec", "sh", filename], 
-                check=True,
-                capture_output=True, # Captura a saída para melhor logging
-                text=True
-            )
-            self.logger.info(f"Script de instalação do SNX executado com sucesso. Saída: {process.stdout}")
-            GLib.idle_add(on_success, "Instalação concluída com sucesso! Por favor, reinicie o aplicativo.")
-
-        except FileNotFoundError:
-            self.logger.error("Erro: 'pkexec' não encontrado. É necessário para obter permissões de administrador.")
-            GLib.idle_add(on_error, "O comando 'pkexec' não foi encontrado. Não é possível pedir permissão para instalar.")
-        except subprocess.CalledProcessError as e:
-            # Acontece se o usuário cancelar a senha do pkexec ou se o script falhar
-            self.logger.error(f"Erro ao executar o script de instalação do SNX: {e.stderr}")
-            GLib.idle_add(on_error, f"A instalação falhou ou foi cancelada.\n\nDetalhe: {e.stderr}")
-        except Exception as e:
-            self.logger.exception("Erro inesperado durante a instalação do SNX.")
-            GLib.idle_add(on_error, f"Ocorreu um erro inesperado: {e}")
-
-
+# --- Classe de Utilitários (Dependência Interna do Model) ---
 class Utils:
-    """Funções de utilidade para ler/escrever JSON."""
+    """Utility functions for reading/writing JSON configuration."""
     def __init__(self):
-        """Define o caminho do arquivo de configuração."""
-        config_dir = os.path.join(GLib.get_user_config_dir(), "snx-connect")
+        config_dir = os.path.join(os.path.expanduser("~"), ".config", "snx-connect")
         os.makedirs(config_dir, exist_ok=True)
         self.config_file = os.path.join(config_dir, "snx-data.json")
 
-    def readJson(self):
-        """Lê o arquivo de configuração JSON."""
+    def read_json(self):
         try:
-            with open(self.config_file, "r") as file:
-                return json.load(file)
+            with open(self.config_file, "r") as f:
+                return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             return {}
 
-    def writeJson(self, changes):
-        """Escreve no arquivo de configuração JSON."""
-        with open(self.config_file, "w") as file:
-            json.dump(changes, file, indent=4)
+    def write_json(self, data):
+        with open(self.config_file, "w") as f:
+            json.dump(data, f, indent=4)
 
-    def extract_addresses(self, nslookup_output_lines):
-        """Extrai endereços IP da saída do nslookup."""
-        resolved_ips = set()
+    def extract_ip_addresses(self, nslookup_output_lines):
+        ips = set()
         address_pattern = re.compile(r"^\s*Address:\s*([0-9a-fA-F.:]+)")
-        for i, line_content in enumerate(nslookup_output_lines):
-            if line_content.lstrip().startswith("Name:"):
+        for i, line in enumerate(nslookup_output_lines):
+            if line.lstrip().startswith("Name:"):
                 if i + 1 < len(nslookup_output_lines):
-                    next_line = nslookup_output_lines[i+1]
+                    next_line = nslookup_output_lines[i + 1]
                     match = address_pattern.match(next_line)
                     if match:
                         ip = match.group(1)
-                        if ":" not in ip:
-                            resolved_ips.add(ip)
-        return list(resolved_ips)
-    
-        
-class VpnCon:
-    def __init__(self, server, username, password, keepinfo):
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.utils = Utils() # Mantenha sua classe de utilidades
-        self.server = server
-        self.username = username
-        self.password = password
-        self.keepinfo = keepinfo
-        self.should_auto_add_routes_on_connect = False # Initialize flag
-        self.office_mode_ip = None # Initialize office_mode_ip
+                        if ":" not in ip: # Filtra endereços IPv6
+                            ips.add(ip)
+        return list(ips)
 
-        if self.keepinfo:
-            # Se keepinfo for True, salva as informações no JSON
-            data_to_save = self.utils.readJson()
-            data_to_save["server"] = self.server
-            data_to_save["username"] = self.username
-            data_to_save["password"] = self.password
-            data_to_save["keepinfo"] = self.keepinfo # Ensure keepinfo itself is saved
-            try:
-                self.utils.writeJson(data_to_save)
-                self.logger.info("Credentials saved to snx-data.json as keepinfo is true.")
-            except Exception as e:
-                self.logger.error(f"Error writing credentials to snx-data.json: {e}")
-
-        # Check 'keepAddress' flag from JSON to decide if routes should be auto-added on connect
-        current_json_data = self.utils.readJson()
-        if current_json_data.get("keepAddress", False):
-            self.should_auto_add_routes_on_connect = True
-            self.logger.info("VpnCon initialized: 'keepAddress' is true. Routes will be auto-added on successful connection.")
-        else:
-            self.logger.info("VpnCon initialized: 'keepAddress' is false or not set. Routes will not be auto-added.")
-
-    def _auto_add_saved_routes(self):
-        """
-        Adds routes that are saved in snx-data.json.
-        This method is intended to be called after a successful VPN connection
-        if 'keepAddress' was true.
-        """
-        if not self.office_mode_ip:
-            self.logger.error("Office Mode IP not available for auto-adding routes.")
-            return
-
-        json_data_routes = self.utils.readJson()
-        commands_to_run = []
-        found_routes_to_add = False
-
-        for key, value in json_data_routes.items():
-            if key.endswith("Address") and isinstance(value, list): # Filters for entries like "domain.comAddress": [...]
-                domain_name = key.replace("Address", "")
-                addresses = value
-
-                if not addresses:
-                    self.logger.info(f"No addresses found for domain {domain_name} in snx-data.json, skipping auto-add for this domain.")
-                    continue
-
-                for addr in addresses:
-                    commands_to_run.append(f"ip route add {addr} via {self.office_mode_ip} dev tunsnx")
-                if addresses:
-                    found_routes_to_add = True
-                    self.logger.info(f"Scheduled auto-add for domain: {domain_name} with IPs: {addresses}")
-
-        if not found_routes_to_add:
-            self.logger.info("No saved routes to auto-add based on snx-data.json entries.")
-            return
-
-        command_script = "\n".join(commands_to_run)
-        self.logger.info(f"Attempting to auto-add saved routes via pkexec. Script:\n{command_script}")
-        try:
-            process = subprocess.Popen(
-                ["pkexec", "bash"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            stdout, stderr = process.communicate(input=command_script)
-            
-            if process.returncode == 0:
-                self.logger.info("Successfully auto-added saved routes.")
-                if stdout and stdout.strip(): 
-                    self.logger.debug(f"pkexec stdout for auto-add routes: {stdout.strip()}")
-            else:
-                error_msg = f"Error auto-adding saved routes. pkexec Return code: {process.returncode}"
-                if stderr and stderr.strip(): 
-                    error_msg += f"\npkexec stderr: {stderr.strip()}"
-                self.logger.error(error_msg)
-        except FileNotFoundError:
-            self.logger.error("pkexec command not found. Cannot auto-add routes. Please ensure 'pkexec' and 'bash' are installed and in PATH.")
-        except Exception as e:
-            self.logger.exception("Exception while auto-adding saved routes.")
-
-    # O método que o front-end irá chamar
-    def connect(self):
-        """
-        Inicia a conexão em uma thread, recebendo os callbacks do front-end.
-        """
-        thread = threading.Thread(target=self._run_connection_thread)
-        thread.daemon = True
-        thread.start()
-
-    # O método privado que executa na thread
-    def _run_connection_thread(self):
-        command_str = f"snx -s {self.server} -u {self.username}"
-        try:
-            child = pexpect.spawn(command_str, encoding='utf-8')
-            child.logfile_read = sys.stdout  # Para vermos tudo que acontece
-            
-            print("\n--- Enviando senha... ---")
-            child.expect("password")
-            child.sendline(self.password)
-            index = child.expect([
-                'accept?',      # Cenário 0: O prompt de confirmação apareceu
-                'Office',       # Cenário 1: O modo Office foi ativado (não precisa de 'y')
-                pexpect.EOF,    # Cenário 2: O processo morreu (ex: senha incorreta)
-            ], timeout=30)
-            
-            if index == 0:
-                print("\n--- Aceitando termos de uso... ---")
-                # Cenário 0: O prompt de confirmação apareceu, enviamos 'y'
-                child.sendline("y")
-            elif index == 1:
-                stdout = child.before
-            else:
-                self.logger.error(f"VPN connection failed. SNX Return code: . Error: ")
-                return {"status": False, "message": "VPN connection failed. SNX process ended unexpectedly."}
-                #GLib.idle_add(on_error, "error_message")
-
-
-            if stdout:
-                pattern = r"Office Mode IP\s+:\s+(.+)"
-                match = re.search(pattern, stdout)
-                if match:
-                    self.office_mode_ip = match.group(1).strip()
-                    self.logger.info(f"Office Mode IP obtained: {self.office_mode_ip}")
-                    
-                    # Update JSON with the new IP
-                    data_for_ip_update = self.utils.readJson()
-                    data_for_ip_update["ip"] = self.office_mode_ip
-                    try:
-                        self.utils.writeJson(data_for_ip_update)
-                    except Exception as e:
-                        self.logger.error(f"Error writing IP to snx-data.json: {e}")
-                        return {"status": False, "message": f"Error writing IP to snx-data.json: {e}"}
-
-
-                    # Now, check if we need to auto-add routes
-                    if self.should_auto_add_routes_on_connect:
-                        self.logger.info("Connection successful. Proceeding to auto-add saved routes.")
-                        self._auto_add_saved_routes() # Call the new method
-                    else:
-                        self.logger.info("Connection successful. Auto-adding routes is disabled ('keepAddress' is false or was not readable).")
-                        return {"status": True, "message": "VPN connected successfully, but auto-adding routes is disabled.", "office_mode_ip": self.office_mode_ip}
-                        #GLib.idle_add(on_success, self.office_mode_ip)
-                else:
-                    error_message_no_ip = "SNX connected, but Office Mode IP not found in output."
-                    if stdout: error_message_no_ip += f"\nOutput: {stdout}"
-                    self.logger.error(error_message_no_ip)
-                    return {"status": False, "message": error_message_no_ip}
-                    #GLib.idle_add(on_error, error_message_no_ip)
-                    
-                
-            else:
-                self.logger.error(f"VPN connection failed. SNX Return code: . Error: ")
-                return {"status": False, "message": "VPN connection failed. SNX process ended unexpectedly."}
-                #GLib.idle_add(on_error, "error_message")
-        except Exception as e:
-            exception_msg = f"An exception occurred during VPN connection: {e}"
-            self.logger.exception("An exception occurred during VPN connection.")
-            return {"status": False, "message": exception_msg}
-            #GLib.idle_add(on_error, str(e))
-class VpnConWeb:
+# --- O Model Principal ---
+class VpnManager:
+    """
+    The main Model class. Encapsulates all business logic for interacting
+    with the SNX VPN and managing configuration.
+    This class is synchronous and thread-unaware.
+    """
     def __init__(self):
-        self.utils = Utils() # Instancia sua classe de utilidades
-        data = self.utils.readJson()
-        self.office_mode_ip = data.get("ip")
-    
-    # Note: VpnConWeb uses GLib.idle_add for UI feedback, not direct print for logging.
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.utils = Utils()
+        self.office_mode_ip = self.utils.read_json().get("ip")
+
+    # --- Dependency Management ---
+    def check_dependencies(self):
+        """Checks for required system dependencies."""
+        return {
+            "snx_installed": shutil.which("snx") is not None,
+            "pkexec_installed": shutil.which("pkexec") is not None,
+        }
+
+    def install_snx(self):
+        """Attempts to install SNX using the local script. Synchronous."""
+        self.logger.info("Attempting to install SNX via local script...")
+        dirname = os.path.dirname(__file__)
+        script_path = os.path.join(dirname, "bin", "snx_install_linux30.sh")
+
+        if not os.path.exists(script_path):
+            raise DependencyError("Installation script not found.")
+        
+        try:
+            process = subprocess.run(
+                ["pkexec", "sh", script_path], 
+                check=True, capture_output=True, text=True
+            )
+            self.logger.info(f"SNX installation script successful. Output: {process.stdout}")
+            return {"status": True, "message": "Installation successful!"}
+        except FileNotFoundError:
+            raise DependencyError("pkexec command not found.")
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"SNX installation script failed: {e.stderr}")
+            raise DependencyError(f"Installation failed or was cancelled.\nDetail: {e.stderr}")
+
+    # --- Connection Logic ---
+    def connect(self, server, username, password, keep_info):
+        """Connects to the VPN. This is a blocking, synchronous method."""
+        command = f"snx -s {server} -u {username}"
+        try:
+            child = pexpect.spawn(command, encoding='utf-8', logfile=sys.stdout)
+            
+            child.expect("[Pp]assword:", timeout=15)
+            child.sendline(password)
+            
+            index = child.expect(['accept?', 'Office', pexpect.EOF], timeout=30)
+            
+            if index == 0: # 'accept?'
+                child.sendline("y")
+                child.expect('Office', timeout=20)
+            elif index == 2: # EOF
+                raise ConnectionError("SNX process ended unexpectedly after password.")
+
+            output = child.before
+            child.expect(pexpect.EOF) # Wait for the process to finish
+            
+            pattern = r"Office Mode IP\s+:\s+([0-9\.]+)"
+            match = re.search(pattern, output)
+            if not match:
+                raise ConnectionError("Office Mode IP not found in SNX output.")
+
+            self.office_mode_ip = match.group(1).strip()
+            self.logger.info(f"Office Mode IP obtained: {self.office_mode_ip}")
+            
+            # Persist data if requested
+            self._update_connection_data(server, username, password, keep_info)
+            
+            return {"status": True, "office_ip": self.office_mode_ip}
+
+        except pexpect.exceptions.TIMEOUT:
+            raise ConnectionError("Connection timed out waiting for a response from SNX.")
+        except pexpect.exceptions.EOF:
+            raise ConnectionError("SNX process terminated unexpectedly before connection.")
+        finally:
+            if 'child' in locals() and child.isalive():
+                child.close()
+
+    def _update_connection_data(self, server, username, password, keep_info):
+        """Saves connection info to the JSON file."""
+        data = self.utils.read_json()
+        data["ip"] = self.office_mode_ip
+        if keep_info:
+            data["server"] = server
+            data["username"] = username
+            data["password"] = password
+            data["keepinfo"] = True
+        self.utils.write_json(data)
+        
+    # --- Disconnection Logic ---
+    def disconnect(self):
+        """Disconnects from the VPN. Synchronous."""
+        try:
+            self.logger.info("Attempting VPN disconnection using 'snx -d'.")
+            subprocess.run("snx -d", shell=True, check=True, text=True, capture_output=True)
+            self._delete_saved_routes()
+            self._update_json_on_disconnect()
+            self.office_mode_ip = None
+            return {"status": True, "message": "Disconnected successfully."}
+        except subprocess.CalledProcessError as e:
+            self.logger.warning(f"'snx -d' failed. This might be normal. Stderr: {e.stderr}")
+            # Assume disconnection anyway and proceed with cleanup
+            self._delete_saved_routes()
+            self._update_json_on_disconnect()
+            return {"status": True, "message": "Disconnected, 'snx -d' reported an error (might be ok)."}
+        except Exception as e:
+            raise DisconnectionError(f"A critical error occurred: {e}")
+
+    def _update_json_on_disconnect(self):
+        """Cleans up the JSON file on disconnect based on user settings."""
+        data = self.utils.read_json()
+        final_data = {}
+        if data.get("keepinfo", False):
+            final_data = {
+                "server": data.get("server"),
+                "username": data.get("username"),
+                "password": data.get("password"),
+                "keepinfo": True
+            }
+            if data.get("keepAddress", False):
+                final_data["keepAddress"] = True
+                for key, value in data.items():
+                    if key.endswith("Address"):
+                        final_data[key] = value
+        self.utils.write_json(final_data)
+
+    # --- Route Management Logic ---
+    def get_saved_routes(self):
+        """Retrieves saved routes from the configuration file."""
+        data = self.utils.read_json()
+        routes = []
+        for key, value in data.items():
+            if key.endswith("Address") and isinstance(value, list):
+                domain = key.replace("Address", "")
+                for ip in value:
+                    routes.append({"domain": domain, "ip": ip})
+        return routes
+
     def add_route(self, domain):
-        """
-        Inicia a adição de rota em uma thread, recebendo os callbacks do front-end.
-        Este é o único método que o seu front-end precisa chamar.
-        """
+        """Resolves a domain and adds system routes for it. Synchronous."""
         if not self.office_mode_ip:
-            return {"status": False, "message": "Office Mode IP não está definido. Conecte-se primeiro."}
-
-        thread = threading.Thread(target=self._run_add_route_thread, args=(domain, on_success, on_error))
-        thread.daemon = True
-        thread.start()
-
-    def _run_add_route_thread(self, domain, on_success, on_error):
+            raise RouteError("Cannot add route: Office Mode IP is not set.")
+        
         try:
             process = subprocess.run(
                 f"nslookup {domain}", shell=True, capture_output=True, text=True, check=True
             )
-            addresses = self.utils.extract_addresses(process.stdout.splitlines())
+            addresses = self.utils.extract_ip_addresses(process.stdout.splitlines())
             if not addresses:
-                #GLib.idle_add(on_error, f"Nenhum endereço encontrado para o domínio: {domain}")
-                return {"status": False, "message": f"Nenhum endereço encontrado para o domínio: {domain}"}
-        except Exception as e:
-            #GLib.idle_add(on_error, f"Falha ao resolver o domínio '{domain}': {e}")
-            return {"status": False, "message": f"Falha ao resolver o domínio '{domain}': {e}"}
-
-
-        # --- CORREÇÃO PRINCIPAL AQUI ---
-        # 1. Construir uma lista de todos os comandos a serem executados
-        commands_to_run = [
-            f"ip route add {address} via {self.office_mode_ip}" for address in addresses
-        ]
-        # Transforma a lista em uma única string, com cada comando em uma nova linha
-        command_script = "\n".join(commands_to_run)
-
-        try:
-            # 2. Executa pkexec UMA VEZ, passando todos os comandos para o bash
-            process = subprocess.Popen(
-                ["pkexec", "bash"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            stdout, stderr = process.communicate(input=command_script)
-            
-            # 3. Verifica se o script bash foi executado com sucesso
-            if process.returncode != 0:
-                raise subprocess.CalledProcessError(process.returncode, "bash", stderr)
-
-            # Se teve sucesso, salva tudo no JSON
-            json_data = self.utils.readJson()
-            if f"{domain}Address" not in json_data:
-                json_data[f"{domain}Address"] = []
-            
-            successful_addresses = []
-            for address in addresses:
-                if address not in json_data[f"{domain}Address"]:
-                    json_data[f"{domain}Address"].append(address)
-                successful_addresses.append(address)
-            self.utils.writeJson(json_data)
-
-            # 4. Notifica a UI do sucesso
-            success_message = f"Rotas para '{domain}' adicionadas com sucesso."
-            return {"status": True, "message": success_message}
-            #GLib.idle_add(on_success, success_message, successful_addresses)
-
+                raise RouteError(f"No valid IPv4 addresses found for {domain}.")
         except subprocess.CalledProcessError:
-            return {"status": False, "message": f"Falha ao adicionar rotas para '{domain}'. Erro: {stderr.strip()}"}
-            #GLib.idle_add(on_error, f"Falha ao adicionar rotas. Permissão negada ou erro.")
-        except Exception as e:
-            return {"status": False, "message": f"Erro inesperado ao adicionar rotas: {str(e)}"}
-            #GLib.idle_add(on_error, str(e))
-class VpnDiss:
-    def __init__(self):
-        self.utils = Utils()
-        self.logger = logging.getLogger(self.__class__.__name__)
-        
-        
-    def disconnect(self):
-        thread = threading.Thread(target=self._perform_disconnect_actions)
-        thread.daemon = True
-        thread.start()
-
-    def _perform_disconnect_actions(self):
-        try:
-            self.logger.info("Attempting VPN disconnection using 'snx -d'.")
-            snx_process = subprocess.run("snx -d", shell=True, text=True, capture_output=True)
-            if snx_process.returncode == 0:
-                self.logger.info("'snx -d' command executed successfully.")
-            else:
-                self.logger.warning(f"'snx -d' command failed or returned non-zero (RC: {snx_process.returncode}). "
-                                    f"Stdout: '{snx_process.stdout.strip()}', Stderr: '{snx_process.stderr.strip()}'. "
-                                    "This might be normal if already disconnected.")
-
-            # Optional: Disable IPv6 (Consider if this is always necessary on disconnect)
-            self._delete_saved_routes()
-
-            # Update snx-data.json based on keepinfo and keepAddress
-            self._update_json_on_disconnect()
-
-            return {"status": True, "message": "VPN disconnected successfully."}
-            #GLib.idle_add(on_success, "VPN disconnection process completed.")
-
-        except Exception as e: # Catch-all for the entire disconnect process
-            self.logger.exception("An critical error occurred during the VPN disconnection process.")
-            return {"status": False, "message": f"Disconnection failed critically: {str(e)}"}
-            #GLib.idle_add(on_error, f"Disconnection failed critically: {str(e)}")
-
-    def _delete_saved_routes(self):
-        """Lê o arquivo JSON e tenta remover todas as rotas salvas."""
-        try:
-            current_data_for_routes = self.utils.readJson()
-            office_ip_for_deletion = current_data_for_routes.get("ip")
-            route_deletion_commands = []
-
-            if office_ip_for_deletion:
-                for key, value in current_data_for_routes.items():
-                    if key.endswith("Address") and isinstance(value, list):
-                        domain_name = key.replace("Address", "")
-                        for addr in value:
-                            # Assuming 'tunsnx' is the device. This might need to be confirmed or made dynamic.
-                            route_deletion_commands.append(f"ip route del {addr} via {office_ip_for_deletion} dev tunsnx")
-                        if value:
-                            self.logger.info(f"Scheduled deletion of routes for {domain_name} (IPs: {value}) via {office_ip_for_deletion}")
-            else:
-                self.logger.warning("No 'ip' found in snx-data.json; cannot specifically delete routes via VPN gateway.")
-
-            if route_deletion_commands:
-                script = "\n".join(route_deletion_commands)
-                self.logger.info(f"Executing route deletion script with pkexec:\n{script}")
-                pk_proc = subprocess.Popen(["pkexec", "bash"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                s_out, s_err = pk_proc.communicate(input=script)
-                if pk_proc.returncode == 0:
-                    self.logger.info("Route deletion script executed successfully via pkexec.")
-                    if s_out.strip(): self.logger.debug(f"pkexec stdout for route deletion: {s_out.strip()}")
-                else:
-                    self.logger.error(f"Route deletion script via pkexec failed. RC: {pk_proc.returncode}. Stderr: {s_err.strip()}")
-            else:
-                self.logger.info("No routes found to delete or no VPN IP was available for deletion commands.")
-        except Exception as e_route_del_logic:
-            self.logger.error(f"Unexpected error during route deletion logic: {e_route_del_logic}", exc_info=True)
-
-    def _update_json_on_disconnect(self):
-        """Atualiza o arquivo JSON com base nas flags 'keepinfo' e 'keepAddress'."""
-        try:
-            data_before_final_write = self.utils.readJson()
-            final_data_to_write = {}
-
-            if data_before_final_write.get("keepinfo", False):
-                self.logger.info("'keepinfo' is true. Preserving server, username, password, and keepinfo flag.")
-                final_data_to_write["server"] = data_before_final_write.get("server")
-                final_data_to_write["username"] = data_before_final_write.get("username")
-                final_data_to_write["password"] = data_before_final_write.get("password")
-                final_data_to_write["keepinfo"] = True
-
-                if data_before_final_write.get("keepAddress", False):
-                    self.logger.info("'keepAddress' is also true. Preserving *Address entries and keepAddress flag.")
-                    final_data_to_write["keepAddress"] = True
-                    for key, value in data_before_final_write.items():
-                        if key.endswith("Address"):
-                            final_data_to_write[key] = value
-                else:
-                    self.logger.info("'keepAddress' is false (while 'keepinfo' is true). Route addresses and keepAddress flag will not be preserved.")
-            else:
-                self.logger.info("'keepinfo' is false. Clearing all persistent data (server, user, pass, keepinfo, keepAddress, routes).")
+            raise RouteError(f"Failed to resolve domain: {domain}")
             
-            # 'ip' field is always removed on disconnect, regardless of flags.
-            self.utils.writeJson(final_data_to_write)
-            self.logger.info(f"snx-data.json updated after disconnect. Final data written: {final_data_to_write}")
-        except Exception as e_final_update_logic:
-            self.logger.error(f"Error during final update logic of snx-data.json: {e_final_update_logic}", exc_info=True)
+        commands = [f"ip route add {addr} via {self.office_mode_ip}" for addr in addresses]
+        self._run_privileged_commands(commands)
+        
+        # Persist the new route
+        data = self.utils.read_json()
+        route_key = f"{domain}Address"
+        if route_key not in data:
+            data[route_key] = []
+        for addr in addresses:
+            if addr not in data[route_key]:
+                data[route_key].append(addr)
+        self.utils.write_json(data)
 
-# --- Main function (commented out, for command-line use if ever needed) ---
-#     parser = argparse.ArgumentParser(description='Lidando com a VPN SNX')
-#     parser.add_argument("action", choices=['on','off'], help="On para conectar a vpn, Off para desconectar")
-#     parser.add_argument("-s", "--server", help="Endereço do servidor VPN")
-#     parser.add_argument("-u", "--username", help="Nome de usuário para a VPN")
-#     parser.add_argument("-p", "--password", help="Senha para a VPN")
-#     args = parser.parse_args()
+        return {"status": True, "addresses": addresses}
+        
+    def remove_route(self, domain, ip_address):
+        """Removes a specific system route. Synchronous."""
+        if not self.office_mode_ip:
+            raise RouteError("Cannot remove route: Office Mode IP is not set.")
+        
+        commands = [f"ip route del {ip_address} via {self.office_mode_ip}"]
+        self._run_privileged_commands(commands)
+        
+        # Remove from JSON
+        data = self.utils.read_json()
+        route_key = f"{domain}Address"
+        if route_key in data and ip_address in data[route_key]:
+            data[route_key].remove(ip_address)
+            if not data[route_key]: # Remove key if list is empty
+                del data[route_key]
+        self.utils.write_json(data)
 
-#     if args.action == "on":
-#         if not all([args.server, args.username, args.password]):
-#             parser.error("Para a ação 'on', os argumentos --server, --username, e --password são obrigatórios.")
-#         VpnCon(server=args.server, username=args.username, password=args.password)
-#     elif args.action == "off":
-#         VpnDiss()
-#     #def connectSNX(self, ip):
+        return {"status": True}
+        
+    def _delete_saved_routes(self):
+        """Internal method to delete all saved routes on disconnect."""
+        if not self.office_mode_ip:
+            return
+        routes = self.get_saved_routes()
+        commands = [f"ip route del {route['ip']} via {self.office_mode_ip}" for route in routes]
+        if commands:
+            try:
+                self._run_privileged_commands(commands)
+            except Exception as e:
+                self.logger.error(f"Failed to delete all routes on disconnect: {e}")
 
-
-# main()
-
+    def _run_privileged_commands(self, commands):
+        """Helper to run a list of commands using pkexec."""
+        script = "\n".join(commands)
+        try:
+            process = subprocess.Popen(
+                ["pkexec", "bash"], stdin=subprocess.PIPE, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            _, stderr = process.communicate(input=script)
+            if process.returncode != 0:
+                raise VpnError(f"Privileged command failed: {stderr.strip()}")
+        except FileNotFoundError:
+            raise DependencyError("pkexec command not found.")
