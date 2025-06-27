@@ -9,7 +9,9 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import GLib, Gtk, Adw, Gio, GObject
 import shutil
+import pexpect
 import sys # Também será útil
+from controller import Controller
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -22,6 +24,7 @@ class CheckDependencies:
     """Classe para verificar e instalar dependências como o SNX."""
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.control = Controller
 
     def check_snx_exists(self):
         """
@@ -59,7 +62,8 @@ class CheckDependencies:
             # Verifica se o script existe antes de tentar rodar
             if not os.path.exists(filename):
                 self.logger.error(f"Script de instalação não encontrado em: {script_path}")
-                GLib.idle_add(on_error, "O script de instalação (snx_install_linux30.sh) não foi encontrado.")
+                self.control.return_install_snx_status(False, "O script de instalação (snx_install_linux30.sh) não foi encontrado.")
+                #GLib.idle_add(on_error, "O script de instalação (snx_install_linux30.sh) não foi encontrado.")
                 return
 
             process = subprocess.run(
@@ -212,26 +216,43 @@ class VpnCon:
             self.logger.exception("Exception while auto-adding saved routes.")
 
     # O método que o front-end irá chamar
-    def connect(self, on_success, on_error):
+    def connect(self):
         """
         Inicia a conexão em uma thread, recebendo os callbacks do front-end.
         """
-        thread = threading.Thread(target=self._run_connection_thread, args=(on_success, on_error))
+        thread = threading.Thread(target=self._run_connection_thread)
         thread.daemon = True
         thread.start()
 
     # O método privado que executa na thread
-    def _run_connection_thread(self, on_success, on_error):
+    def _run_connection_thread(self):
         command_str = f"snx -s {self.server} -u {self.username}"
         try:
-            process = subprocess.Popen(
-                command_str, shell=True,
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, text=True
-            )
-            stdout, stderr = process.communicate(input=f"{self.password}\n", timeout=15)
+            child = pexpect.spawn(command_str, encoding='utf-8')
+            child.logfile_read = sys.stdout  # Para vermos tudo que acontece
+            
+            print("\n--- Enviando senha... ---")
+            child.expect("password")
+            child.sendline(self.password)
+            index = child.expect([
+                'accept?',      # Cenário 0: O prompt de confirmação apareceu
+                'Office',       # Cenário 1: O modo Office foi ativado (não precisa de 'y')
+                pexpect.EOF,    # Cenário 2: O processo morreu (ex: senha incorreta)
+            ], timeout=30)
+            
+            if index == 0:
+                print("\n--- Aceitando termos de uso... ---")
+                # Cenário 0: O prompt de confirmação apareceu, enviamos 'y'
+                child.sendline("y")
+            elif index == 1:
+                stdout = child.before
+            else:
+                self.logger.error(f"VPN connection failed. SNX Return code: . Error: ")
+                return {"status": False, "message": "VPN connection failed. SNX process ended unexpectedly."}
+                #GLib.idle_add(on_error, "error_message")
 
-            if process.returncode == 0:
+
+            if stdout:
                 pattern = r"Office Mode IP\s+:\s+(.+)"
                 match = re.search(pattern, stdout)
                 if match:
@@ -245,6 +266,8 @@ class VpnCon:
                         self.utils.writeJson(data_for_ip_update)
                     except Exception as e:
                         self.logger.error(f"Error writing IP to snx-data.json: {e}")
+                        return {"status": False, "message": f"Error writing IP to snx-data.json: {e}"}
+
 
                     # Now, check if we need to auto-add routes
                     if self.should_auto_add_routes_on_connect:
@@ -252,26 +275,25 @@ class VpnCon:
                         self._auto_add_saved_routes() # Call the new method
                     else:
                         self.logger.info("Connection successful. Auto-adding routes is disabled ('keepAddress' is false or was not readable).")
-                    
-                    GLib.idle_add(on_success, self.office_mode_ip)
+                        return {"status": True, "message": "VPN connected successfully, but auto-adding routes is disabled.", "office_mode_ip": self.office_mode_ip}
+                        #GLib.idle_add(on_success, self.office_mode_ip)
                 else:
                     error_message_no_ip = "SNX connected, but Office Mode IP not found in output."
                     if stdout: error_message_no_ip += f"\nOutput: {stdout}"
                     self.logger.error(error_message_no_ip)
-                    GLib.idle_add(on_error, error_message_no_ip)
+                    return {"status": False, "message": error_message_no_ip}
+                    #GLib.idle_add(on_error, error_message_no_ip)
+                    
+                
             else:
-                error_message = stderr.strip() if stderr else "Unknown error during VPN connection."
-                self.logger.error(f"VPN connection failed. SNX Return code: {process.returncode}. Error: {error_message}")
-                GLib.idle_add(on_error, error_message)
-        except subprocess.TimeoutExpired:
-            timeout_msg = "VPN connection command timed out."
-            self.logger.error(timeout_msg)
-            if process: process.kill() # Ensure process is killed
-            GLib.idle_add(on_error, timeout_msg)
+                self.logger.error(f"VPN connection failed. SNX Return code: . Error: ")
+                return {"status": False, "message": "VPN connection failed. SNX process ended unexpectedly."}
+                #GLib.idle_add(on_error, "error_message")
         except Exception as e:
             exception_msg = f"An exception occurred during VPN connection: {e}"
             self.logger.exception("An exception occurred during VPN connection.")
-            GLib.idle_add(on_error, str(e))
+            return {"status": False, "message": exception_msg}
+            #GLib.idle_add(on_error, str(e))
 class VpnConWeb:
     def __init__(self):
         self.utils = Utils() # Instancia sua classe de utilidades
@@ -279,14 +301,13 @@ class VpnConWeb:
         self.office_mode_ip = data.get("ip")
     
     # Note: VpnConWeb uses GLib.idle_add for UI feedback, not direct print for logging.
-    def add_route(self, domain, on_success, on_error):
+    def add_route(self, domain):
         """
         Inicia a adição de rota em uma thread, recebendo os callbacks do front-end.
         Este é o único método que o seu front-end precisa chamar.
         """
         if not self.office_mode_ip:
-            GLib.idle_add(on_error, "IP da VPN não encontrado. Conecte-se primeiro.")
-            return
+            return {"status": False, "message": "Office Mode IP não está definido. Conecte-se primeiro."}
 
         thread = threading.Thread(target=self._run_add_route_thread, args=(domain, on_success, on_error))
         thread.daemon = True
@@ -299,11 +320,12 @@ class VpnConWeb:
             )
             addresses = self.utils.extract_addresses(process.stdout.splitlines())
             if not addresses:
-                GLib.idle_add(on_error, f"Nenhum endereço encontrado para o domínio: {domain}")
-                return
+                #GLib.idle_add(on_error, f"Nenhum endereço encontrado para o domínio: {domain}")
+                return {"status": False, "message": f"Nenhum endereço encontrado para o domínio: {domain}"}
         except Exception as e:
-            GLib.idle_add(on_error, f"Falha ao resolver o domínio '{domain}': {e}")
-            return
+            #GLib.idle_add(on_error, f"Falha ao resolver o domínio '{domain}': {e}")
+            return {"status": False, "message": f"Falha ao resolver o domínio '{domain}': {e}"}
+
 
         # --- CORREÇÃO PRINCIPAL AQUI ---
         # 1. Construir uma lista de todos os comandos a serem executados
@@ -342,21 +364,27 @@ class VpnConWeb:
 
             # 4. Notifica a UI do sucesso
             success_message = f"Rotas para '{domain}' adicionadas com sucesso."
-            GLib.idle_add(on_success, success_message, successful_addresses)
+            return {"status": True, "message": success_message}
+            #GLib.idle_add(on_success, success_message, successful_addresses)
 
         except subprocess.CalledProcessError:
-            GLib.idle_add(on_error, f"Falha ao adicionar rotas. Permissão negada ou erro.")
+            return {"status": False, "message": f"Falha ao adicionar rotas para '{domain}'. Erro: {stderr.strip()}"}
+            #GLib.idle_add(on_error, f"Falha ao adicionar rotas. Permissão negada ou erro.")
         except Exception as e:
-            GLib.idle_add(on_error, str(e))
+            return {"status": False, "message": f"Erro inesperado ao adicionar rotas: {str(e)}"}
+            #GLib.idle_add(on_error, str(e))
 class VpnDiss:
-    def __init__(self, on_success=None, on_error=None):
+    def __init__(self):
         self.utils = Utils()
         self.logger = logging.getLogger(self.__class__.__name__)
-        thread = threading.Thread(target=self._perform_disconnect_actions, args=(on_success, on_error))
+        
+        
+    def disconnect(self):
+        thread = threading.Thread(target=self._perform_disconnect_actions)
         thread.daemon = True
         thread.start()
 
-    def _perform_disconnect_actions(self, on_success, on_error):
+    def _perform_disconnect_actions(self):
         try:
             self.logger.info("Attempting VPN disconnection using 'snx -d'.")
             snx_process = subprocess.run("snx -d", shell=True, text=True, capture_output=True)
@@ -373,13 +401,13 @@ class VpnDiss:
             # Update snx-data.json based on keepinfo and keepAddress
             self._update_json_on_disconnect()
 
-            if on_success:
-                GLib.idle_add(on_success, "VPN disconnection process completed.")
+            return {"status": True, "message": "VPN disconnected successfully."}
+            #GLib.idle_add(on_success, "VPN disconnection process completed.")
 
         except Exception as e: # Catch-all for the entire disconnect process
             self.logger.exception("An critical error occurred during the VPN disconnection process.")
-            if on_error:
-                GLib.idle_add(on_error, f"Disconnection failed critically: {str(e)}")
+            return {"status": False, "message": f"Disconnection failed critically: {str(e)}"}
+            #GLib.idle_add(on_error, f"Disconnection failed critically: {str(e)}")
 
     def _delete_saved_routes(self):
         """Lê o arquivo JSON e tenta remover todas as rotas salvas."""
