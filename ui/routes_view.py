@@ -1,8 +1,8 @@
 # ui/routes_view.py
-import gi
+import gi  # type: ignore
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, GObject
+from gi.repository import Gtk, Adw, GObject, GLib # Importar GLib é essencial
 
 # Assume que _ está configurado no main.py
 import gettext
@@ -41,10 +41,24 @@ class RouteRow(Gtk.ListBoxRow):
         self.spinner.start()
         self.on_remove_request(self)
 
-    def on_remove_success(self):
-        self.get_parent().remove(self)
+    # Callbacks que são chamados pela thread do Controller
+    def on_remove_success(self, **kwargs):
+        GLib.idle_add(self._update_ui_on_remove_success)
 
     def on_remove_error(self, error_message):
+        GLib.idle_add(self._update_ui_on_remove_error, error_message)
+
+    # Funções auxiliares que fazem o trabalho real na UI
+    def _update_ui_on_remove_success(self):
+        # O get_parent() pode não funcionar se a linha já estiver sendo removida,
+        # uma abordagem mais segura é o pai remover o filho.
+        # Mas para simplificar, vamos manter assim por enquanto.
+        parent = self.get_parent()
+        if parent:
+            parent.remove(self)
+        return False
+
+    def _update_ui_on_remove_error(self, error_message):
         self.spinner.stop()
         self.remove_button.set_sensitive(True)
         dialog = Adw.MessageDialog(
@@ -55,6 +69,7 @@ class RouteRow(Gtk.ListBoxRow):
         dialog.set_response_appearance("ok", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.connect("response", lambda d, r: d.close())
         dialog.present()
+        return False
 
 
 class RoutesView(Gtk.Box):
@@ -129,19 +144,29 @@ class RoutesView(Gtk.Box):
             on_error=route_row.on_remove_error
         )
 
-    def handle_route_add_success(self, message, addresses):
+    # Callbacks que são chamados pela thread do Controller
+    def handle_route_add_success(self, status, addresses):
+        # Usa GLib.idle_add para garantir que a UI seja atualizada na thread principal
+        GLib.idle_add(self._update_ui_on_add_success, addresses)
+
+    def handle_route_add_error(self, error_message):
+        GLib.idle_add(self._update_ui_on_add_error, error_message)
+        
+    # Funções auxiliares que fazem o trabalho real na UI
+    def _update_ui_on_add_success(self, addresses):
         self.add_spinner.stop()
         self.add_button.set_sensitive(True)
-        domain = self.domain_entry.get_text().strip()
+        domain = self.domain_entry.get_text().strip() # Pega o texto de novo aqui dentro
         self.domain_entry.set_text("")
         for addr in addresses:
             self.add_route_to_list(domain, addr)
-        self.show_info_dialog(_("Success"), message)
+        return False # Remove a tarefa da fila do GLib
 
-    def handle_route_add_error(self, error_message):
+    def _update_ui_on_add_error(self, error_message):
         self.add_spinner.stop()
         self.add_button.set_sensitive(True)
         self.show_error_dialog(_("Failed to Add Route"), error_message)
+        return False # Remove a tarefa da fila do GLib
 
     def show_info_dialog(self, title, message):
         dialog = Adw.MessageDialog(

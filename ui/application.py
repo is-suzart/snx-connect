@@ -1,55 +1,106 @@
 # ui/application.py
 import gi  # type: ignore
-
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw
-from .window import MainWindow  # Usando import relativo
+from gi.repository import Gtk, Adw, Gdk, GLib # GLib importado aqui
+from .window import MainWindow
 
 # Assume que _ está configurado no main.py
 import gettext
-
 _ = gettext.gettext
-
 
 class Application(Adw.Application):
     def __init__(self, controller, **kwargs):
         super().__init__(**kwargs, application_id="com.exemplo.SNXConnect")
         self.controller = controller
         self.connect("activate", self.on_activate)
-        self.connect("startup", self.on_startup)
 
-    def on_startup(self):
+    def do_startup(self):
         """
-        Called when the application starts up.
-        This is where we can set up the application, load resources, etc.
+        Sobrescreve o método virtual 'do_startup'.
+        Este é o local correto para carregar recursos globais como CSS.
         """
-        # Aqui você pode carregar recursos adicionais ou configurar o ambiente
-        self.set_accels_for_action("app.quit", ["<Primary>Q"])
+        Adw.Application.do_startup(self)
+        
         provider = Gtk.CssProvider()
-        provider.load_from_path("../style.css")
-        Gtk.StyleContext.add_provider_for_display(
-            Gtk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-        )
+        try:
+            provider.load_from_path('style.css')
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(),
+                provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+            print("CSS customizado carregado com sucesso.")
+        except Exception as e:
+            print(f"Erro ao carregar CSS: {e}")
 
     def on_activate(self, app):
-        win = MainWindow(application=app, controller=self.controller)
-        win.present()
-        self._check_dependencies(win)
+        self.win = MainWindow(application=app, controller=self.controller)
+        self.win.present()
+        self._check_dependencies()
 
-    def _check_dependencies(self, win):
+    def _check_dependencies(self):
         """
-        Uses the controller to check for dependencies, decoupling the view
-        from the back-end logic.
+        Verifica as dependências e, se necessário, oferece a instalação ao usuário.
         """
         dependencies = self.controller.check_dependencies()
         if not dependencies["snx_installed"]:
-            # A lógica para disparar a instalação via controller iria aqui
+            
+            def on_dialog_response(dialog, response_id):
+                if response_id == "install":
+                    self.controller.request_install_snx(
+                        on_success=self.on_install_success,
+                        on_error=self.on_install_error
+                    )
+                dialog.close()
+
+            dialog_body = _("SNX is not installed. This is required for the application to work.")
+            if dependencies["pkexec_installed"]:
+                dialog_body += "\n\n" + _("Do you want to try to install it now?")
+            
             dialog = Adw.MessageDialog(
-                transient_for=win,
-                title=_("Dependencies Missing"),
-                body=_("SNX is not installed. Please install it to continue."),
+                transient_for=self.win,
+                title=_("Dependency Missing"),
+                body=dialog_body,
             )
-            dialog.add_response("ok", _("OK"))
-            dialog.connect("response", lambda d, r: d.close())
+            
+            if dependencies["pkexec_installed"]:
+                dialog.add_response("install", _("Install"))
+                dialog.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)
+                dialog.add_response("cancel", _("Cancel"))
+            else:
+                dialog.add_response("ok", _("OK"))
+
+            dialog.connect("response", on_dialog_response)
             dialog.present()
+    
+    # Callbacks que são chamados pela thread do Controller
+    def on_install_success(self, status, message):
+        GLib.idle_add(self._show_install_success_dialog, message)
+
+    def on_install_error(self, error_message):
+        GLib.idle_add(self._show_install_error_dialog, error_message)
+
+    # Funções auxiliares que fazem o trabalho real na UI
+    def _show_install_success_dialog(self, message):
+        dialog = Adw.MessageDialog(
+            transient_for=self.win,
+            title=_("Installation Successful"),
+            body=message,
+        )
+        dialog.add_response("ok", _("OK"))
+        # Conecta a resposta do diálogo para fechar a aplicação
+        dialog.connect("response", lambda d, r: d.close())
+        dialog.present()
+        return False
+
+    def _show_install_error_dialog(self, error_message):
+        dialog = Adw.MessageDialog(
+            transient_for=self.win,
+            title=_("Installation Failed"),
+            body=str(error_message),
+        )
+        dialog.add_response("ok", _("OK"))
+        dialog.connect("response", lambda d, r: d.close())
+        dialog.present()
+        return False

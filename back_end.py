@@ -1,6 +1,7 @@
 # back_end.py
 import subprocess
 import re
+import io
 import json
 import os
 import logging
@@ -75,6 +76,10 @@ class VpnManager:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.utils = Utils()
         self.office_mode_ip = self.utils.read_json().get("ip")
+        self.server = None
+        self.username = None
+        self.password = None
+        self.keep_info = False
 
     # --- Dependency Management ---
     def check_dependencies(self):
@@ -109,6 +114,14 @@ class VpnManager:
     # --- Connection Logic ---
     def connect(self, server, username, password, keep_info):
         """Connects to the VPN. This is a blocking, synchronous method."""
+        self.server = server
+        self.username = username
+        self.password = password
+        self.keep_info = keep_info
+        
+        if not all([server, username, password]):
+            raise ConnectionError("Server, username, and password must be provided.")
+        
         command = f"snx -s {server} -u {username}"
         try:
             child = pexpect.spawn(command, encoding='utf-8', logfile=sys.stdout)
@@ -120,34 +133,59 @@ class VpnManager:
             
             if index == 0: # 'accept?'
                 child.sendline("y")
-                child.expect('Office', timeout=20)
+                child_index = child.expect(['Office','denied'], timeout=20)
+                if child_index == 1: # 'denied'
+                    raise ConnectionError("Connection denied by SNX. Check your credentials or server settings.")
+                elif child_index == 0: # 'Office'
+                    self.logger.info("Accepted connection request.")
+                    result = self.get_ip_and_connect(child.buffer)
+                    return result
+                    
             elif index == 2: # EOF
                 raise ConnectionError("SNX process ended unexpectedly after password.")
-
-            output = child.before
+            
+            else: # 'Office'
+                self.logger.info("Connected to SNX without needing to accept terms.")
+                result = self.get_ip_and_connect(child.buffer, None)
+                return result
+            
             child.expect(pexpect.EOF) # Wait for the process to finish
-            
-            pattern = r"Office Mode IP\s+:\s+([0-9\.]+)"
-            match = re.search(pattern, output)
-            if not match:
-                raise ConnectionError("Office Mode IP not found in SNX output.")
-
-            self.office_mode_ip = match.group(1).strip()
-            self.logger.info(f"Office Mode IP obtained: {self.office_mode_ip}")
-            
-            # Persist data if requested
-            self._update_connection_data(server, username, password, keep_info)
-            
-            return {"status": True, "office_ip": self.office_mode_ip}
 
         except pexpect.exceptions.TIMEOUT:
             raise ConnectionError("Connection timed out waiting for a response from SNX.")
         except pexpect.exceptions.EOF:
-            raise ConnectionError("SNX process terminated unexpectedly before connection.")
+            output = child.before
+            if "Another session" in output:
+                storage_ip = self.utils.read_json()['ip']
+                if storage_ip:
+                    self.office_mode_ip = storage_ip
+                    self.logger.info(f"Using stored Office Mode IP: {self.office_mode_ip}")
+                    return self.get_ip_and_connect(output, storage_ip)
+                else:
+                    raise ConnectionError("Another session detected, but no stored IP found.")
+            else:
+                raise ConnectionError("SNX process terminated unexpectedly before connection.")
         finally:
             if 'child' in locals() and child.isalive():
                 child.close()
-
+                
+    def get_ip_and_connect(self,output,ip):
+        if not ip:
+            pattern = r"Mode IP\s+:\s+([0-9\.]+)"
+            match = re.search(pattern, output)
+            if not match:
+                raise ConnectionError("Office Mode IP not found in SNX output.")
+        else:
+            match = ip
+        if not self.office_mode_ip:
+            self.office_mode_ip = match.group(1).strip()
+            self.logger.info(f"Office Mode IP obtained: {self.office_mode_ip}")
+            
+        # Persist data if requested
+        self._update_connection_data(self.server, self.username, self.password, self.keep_info)
+            
+        return {"status": True, "office_ip": self.office_mode_ip}
+        
     def _update_connection_data(self, server, username, password, keep_info):
         """Saves connection info to the JSON file."""
         data = self.utils.read_json()
@@ -168,13 +206,13 @@ class VpnManager:
             self._delete_saved_routes()
             self._update_json_on_disconnect()
             self.office_mode_ip = None
-            return {"status": True, "message": "Disconnected successfully."}
+            return {"message": "Disconnected successfully."}
         except subprocess.CalledProcessError as e:
             self.logger.warning(f"'snx -d' failed. This might be normal. Stderr: {e.stderr}")
             # Assume disconnection anyway and proceed with cleanup
             self._delete_saved_routes()
             self._update_json_on_disconnect()
-            return {"status": True, "message": "Disconnected, 'snx -d' reported an error (might be ok)."}
+            return {"message": "Disconnected, 'snx -d' reported an error (might be ok)."}
         except Exception as e:
             raise DisconnectionError(f"A critical error occurred: {e}")
 

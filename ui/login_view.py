@@ -2,8 +2,8 @@
 import gi  # type: ignore
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, GObject
-from back_end import Utils # A View ainda pode precisar de Utils para carregar o estado inicial
+from gi.repository import Gtk, Adw, GObject, GLib # Importar GLib
+from back_end import Utils
 
 # Assume que _ está configurado no main.py
 import gettext
@@ -15,8 +15,8 @@ class LoginView(Gtk.Box):
     def __init__(self, controller):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.controller = controller
-        self.utils = Utils() # Para ler o estado inicial do JSON
-        
+        self.utils = Utils()
+
         self.set_css_name("login-view")
         
         data = self.utils.read_json()
@@ -43,7 +43,7 @@ class LoginView(Gtk.Box):
         self.keep_info_check.connect("toggled", self.on_checkbox_toggled)
 
         self.connect_button = Gtk.Button(label=_("Connect"), halign=Gtk.Align.CENTER)
-        self.connect_button.get_style_context().add_class("suggested-action")
+        self.connect_button.add_css_class("connect-button")
         self.connect_button.connect("clicked", self.on_connect_button_clicked)
         
         self.spinner = Gtk.Spinner(spinning=False, halign=Gtk.Align.CENTER)
@@ -87,17 +87,25 @@ class LoginView(Gtk.Box):
         self.is_checked = widget.get_active()
 
     def on_login_success(self, status, office_ip):
-        self.last_office_ip = office_ip
-        self.spinner.stop()
-        self.connect_button.set_sensitive(True) # Re-enable on success too
-        self.emit("login-success", self.last_office_ip)
+        GLib.idle_add(self._update_ui_on_success, office_ip)
 
     def on_login_error(self, error_message):
+        GLib.idle_add(self._update_ui_on_error, error_message)
+
+    def _update_ui_on_success(self, office_ip):
+        self.last_office_ip = office_ip
+        self.spinner.stop()
+        self.connect_button.set_sensitive(True)
+        self.emit("login-success", self.last_office_ip)
+        return False # Remove a tarefa da fila do GLib
+
+    def _update_ui_on_error(self, error_message):
         self.connect_button.set_sensitive(True)
         self.spinner.stop()
         if "Another session" in error_message:
-            self.emit("login-success", "") # Assume connected
-            return
+            self.emit("login-success", "")
+            return False
+
         dialog = Adw.MessageDialog(
             transient_for=self.get_root(),
             title=_("Login Failed"),
@@ -107,3 +115,4 @@ class LoginView(Gtk.Box):
         dialog.set_response_appearance("ok", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.connect("response", lambda d, r: d.close())
         dialog.present()
+        return False # Remove a tarefa da fila do GLib

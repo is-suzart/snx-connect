@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-06-14 12:47-0300\n"
+"POT-Creation-Date: 2025-06-27 18:39-0300\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,34 +17,108 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: main.py:47
-msgid "Delete"
+#: ui/application.py:57
+msgid "SNX is not installed. This is required for the application to work."
 msgstr ""
 
-#: main.py:84
-msgid "Enter a new item..."
+#: ui/application.py:59
+msgid "Do you want to try to install it now?"
 msgstr ""
 
-#: main.py:88
-msgid "Add"
+#: ui/application.py:63
+msgid "Dependency Missing"
 msgstr ""
 
-#: main.py:145
-msgid "Site"
+#: ui/application.py:68
+msgid "Install"
 msgstr ""
 
-#: main.py:150
-msgid "User"
+#: ui/application.py:70
+msgid "Cancel"
 msgstr ""
 
-#: main.py:155
+#: ui/application.py:72 ui/application.py:91 ui/application.py:103
+#: ui/login_view.py:114 ui/routes_view.py:68 ui/routes_view.py:175
+#: ui/routes_view.py:183
+msgid "OK"
+msgstr ""
+
+#: ui/application.py:88
+msgid "Installation Successful"
+msgstr ""
+
+#: ui/application.py:100
+msgid "Installation Failed"
+msgstr ""
+
+#: ui/window.py:22
+msgid "Disconnect"
+msgstr ""
+
+#: ui/window.py:51
+msgid "Connected"
+msgstr ""
+
+#: ui/window.py:58
+msgid "Login"
+msgstr ""
+
+#: ui/login_view.py:34
+msgid "Site address"
+msgstr ""
+
+#: ui/login_view.py:35
+msgid "Your username"
+msgstr ""
+
+#: ui/login_view.py:37 ui/login_view.py:63
 msgid "Password"
 msgstr ""
 
-#: main.py:157
-msgid "Type Password"
+#: ui/login_view.py:42
+msgid "Keep Info"
 msgstr ""
 
-#: main.py:161
-msgid "Keep Info"
+#: ui/login_view.py:45
+msgid "Connect"
+msgstr ""
+
+#: ui/login_view.py:59
+msgid "Site"
+msgstr ""
+
+#: ui/login_view.py:61
+msgid "User"
+msgstr ""
+
+#: ui/login_view.py:111
+msgid "Login Failed"
+msgstr ""
+
+#: ui/routes_view.py:30
+msgid "Remove this route"
+msgstr ""
+
+#: ui/routes_view.py:66
+msgid "Error Removing Route"
+msgstr ""
+
+#: ui/routes_view.py:90
+msgid "Add New Route"
+msgstr ""
+
+#: ui/routes_view.py:99
+msgid "Enter a domain (e.g., bitbucket.org)"
+msgstr ""
+
+#: ui/routes_view.py:101
+msgid "Add"
+msgstr ""
+
+#: ui/routes_view.py:109
+msgid "Active Routes"
+msgstr ""
+
+#: ui/routes_view.py:168
+msgid "Failed to Add Route"
 msgstr ""

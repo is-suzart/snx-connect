@@ -1,54 +1,123 @@
-# French translations for PACKAGE package.
-# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the PACKAGE package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# French translations for SNX Connect.
+# Copyright (C) 2025 Igor Suzart
+# This file is distributed under the same license as the SNX Connect package.
+# Igor Suzart <email@example.com>, 2025.
 #
-#, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: PACKAGE VERSION\n"
+"Project-Id-Version: SNX Connect 1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-06-14 12:47-0300\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"POT-Creation-Date: 2025-06-27 18:39-0300\n"
+"PO-Revision-Date: 2025-06-27 19:00-0300\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: French <LL@li.org>\n"
+"Language-Team: French <fr@li.org>\n"
 "Language: fr\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: main.py:47
-msgid "Delete"
-msgstr "Supprimer"
+#: ui/application.py:57
+msgid "SNX is not installed. This is required for the application to work."
+msgstr "SNX n'est pas installé. Ceci est requis pour que l'application fonctionne."
 
-#: main.py:84
-msgid "Enter a new item..."
-msgstr "Entrez un nouvel élément..."
+#: ui/application.py:59
+msgid "Do you want to try to install it now?"
+msgstr "Voulez-vous essayer de l'installer maintenant ?"
 
-#: main.py:88
-msgid "Add"
-msgstr "Ajouter"
+#: ui/application.py:63
+msgid "Dependency Missing"
+msgstr "Dépendance Manquante"
 
-#: main.py:145
-msgid "Site"
-msgstr "Site web"
+#: ui/application.py:68
+msgid "Install"
+msgstr "Installer"
 
-#: main.py:150
-msgid "User"
-msgstr "Utilisateur"
+#: ui/application.py:70
+msgid "Cancel"
+msgstr "Annuler"
 
-#: main.py:155
+#: ui/application.py:72 ui/application.py:91 ui/application.py:103
+#: ui/login_view.py:114 ui/routes_view.py:68 ui/routes_view.py:175
+#: ui/routes_view.py:183
+msgid "OK"
+msgstr "OK"
+
+#: ui/application.py:88
+msgid "Installation Successful"
+msgstr "Installation Réussie"
+
+#: ui/application.py:100
+msgid "Installation Failed"
+msgstr "Échec de l'Installation"
+
+#: ui/window.py:22
+msgid "Disconnect"
+msgstr "Déconnecter"
+
+#: ui/window.py:51
+msgid "Connected"
+msgstr "Connecté"
+
+#: ui/window.py:58
+msgid "Login"
+msgstr "Connexion"
+
+#: ui/login_view.py:34
+msgid "Site address"
+msgstr "Adresse du site"
+
+#: ui/login_view.py:35
+msgid "Your username"
+msgstr "Votre nom d'utilisateur"
+
+#: ui/login_view.py:37 ui/login_view.py:63
 msgid "Password"
 msgstr "Mot de passe"
 
-#: main.py:157
-msgid "Type Password"
-msgstr "Tapez le mot de passe"
-
-#: main.py:161
+#: ui/login_view.py:42
 msgid "Keep Info"
-msgstr "Conserver les informations"
+msgstr "Mémoriser les informations"
 
-#: main.py:169
+#: ui/login_view.py:45
 msgid "Connect"
 msgstr "Connecter"
+
+#: ui/login_view.py:59
+msgid "Site"
+msgstr "Site"
+
+#: ui/login_view.py:61
+msgid "User"
+msgstr "Utilisateur"
+
+#: ui/login_view.py:111
+msgid "Login Failed"
+msgstr "Échec de la Connexion"
+
+#: ui/routes_view.py:30
+msgid "Remove this route"
+msgstr "Supprimer cette route"
+
+#: ui/routes_view.py:66
+msgid "Error Removing Route"
+msgstr "Erreur de Suppression de Route"
+
+#: ui/routes_view.py:90
+msgid "Add New Route"
+msgstr "Ajouter une Nouvelle Route"
+
+#: ui/routes_view.py:99
+msgid "Enter a domain (e.g., bitbucket.org)"
+msgstr "Saisir un domaine (ex: bitbucket.org)"
+
+#: ui/routes_view.py:101
+msgid "Add"
+msgstr "Ajouter"
+
+#: ui/routes_view.py:109
+msgid "Active Routes"
+msgstr "Routes Actives"
+
+#: ui/routes_view.py:168
+msgid "Failed to Add Route"
+msgstr "Échec de l'Ajout de Route"
