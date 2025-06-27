@@ -17,6 +17,8 @@ class LoginView(Gtk.Box):
         self.controller = controller
         self.utils = Utils() # Para ler o estado inicial do JSON
         
+        self.set_css_name("login-view")
+        
         data = self.utils.read_json()
         self.is_checked = data.get("keepinfo", False)
         self.last_office_ip = None
