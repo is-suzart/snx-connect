@@ -2,10 +2,9 @@
 import gi  # type: ignore
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, Gdk, GLib # GLib importado aqui
-from .window import MainWindow
+from gi.repository import Gtk, Adw, Gdk
+from .window import MainWindow # Importa MainWindow, que não depende mais deste arquivo
 
-# Assume que _ está configurado no main.py
 import gettext
 _ = gettext.gettext
 
@@ -16,12 +15,7 @@ class Application(Adw.Application):
         self.connect("activate", self.on_activate)
 
     def do_startup(self):
-        """
-        Sobrescreve o método virtual 'do_startup'.
-        Este é o local correto para carregar recursos globais como CSS.
-        """
         Adw.Application.do_startup(self)
-        
         provider = Gtk.CssProvider()
         try:
             provider.load_from_path('style.css')

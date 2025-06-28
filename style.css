@@ -1,3 +1,71 @@
-#login-view{
-    border: 2px solid greenyellow;
+/* style.css */
+
+/* --- Estilo para um Widget Específico por ID --- */
+#login-view {
+    background-color: #f4f5f7;
+}
+
+/* --- Estilo para o Seletor de Tema (Com Seletores Corrigidos) --- */
+/* O container que segura os botões de tema */
+.themeselector {
+    padding: 3px;
+    border-radius: 99px; /* Arredonda as bordas do container */
+    background-color: alpha(currentColor, 0.05);
+}
+
+/* O estilo base para cada botão de tema.
+   Este seletor agora é mais específico: "um checkbutton DENTRO de um .themeselector"
+*/
+.themeselector checkbutton {
+    padding: 0;
+    min-height: 28px;
+    min-width: 28px;
+    background-clip: content-box;
+    border-radius: 9999px; /* Faz o botão ser um círculo perfeito */
+    border: 2px solid transparent; /* Borda invisível para manter o tamanho */
+}
+
+/* Estilo para quando um botão está selecionado (:checked) */
+.themeselector checkbutton:checked {
+    border-color: @theme_selected_bg_color; /* Usa a cor de destaque do tema Adwaita */
+}
+
+/* Esconde o indicador de radio/check padrão do GTK */
+.themeselector checkbutton > check {
+    -gtk-icon-source: none;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border: none;
+    background: none;
+}
+
+/* Define a aparência de cada botão individualmente */
+.themeselector checkbutton.follow {
+    background-image: linear-gradient(to bottom right, white 49.99%, #303030 50.01%);
+    border-color: alpha(currentColor, 0.2);
+}
+
+.themeselector checkbutton.light {
+    background-color: white;
+    border-color: alpha(currentColor, 0.2);
+}
+
+.themeselector checkbutton.dark {
+    background-color: #303030;
+    border-color: alpha(currentColor, 0.2);
+}
+
+/* --- Outros Estilos --- */
+.connect-button {
+    background-color: #2E8B57;
+    color: white;
+    font-weight: bold;
+    border-radius: 12px;
+    padding: 6px 12px;
+}
+
+button.flat {
+    background: none;
+    border: none;
 }
