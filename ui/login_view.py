@@ -38,6 +38,13 @@ class LoginView(Gtk.Box):
             visibility=False,
             input_purpose=Gtk.InputPurpose.PASSWORD,
         )
+        self.password_entry.set_icon_from_icon_name(
+            Gtk.EntryIconPosition.SECONDARY, "visibility-off-symbolic"
+        )
+        self.password_entry.set_icon_activatable(Gtk.EntryIconPosition.SECONDARY, True)
+        # Conecta o clique do ícone à nossa função de callback
+        self.password_entry.connect("icon-press", self.on_password_icon_pressed)
+
 
         self.keep_info_check = Gtk.CheckButton(label=_("Keep Info"))
         self.keep_info_check.connect("toggled", self.on_checkbox_toggled)
@@ -82,6 +89,17 @@ class LoginView(Gtk.Box):
             on_success=self.on_login_success, 
             on_error=self.on_login_error
         )
+    
+    
+    def on_password_icon_pressed(self, entry, icon_pos):
+        """Callback para quando o ícone de visibilidade da senha é clicado."""
+        is_visible = not entry.get_visibility()
+        entry.set_visibility(is_visible)
+        
+        if is_visible:
+            entry.set_icon_from_icon_name(Gtk.EntryIconPosition.SECONDARY, "visibility-symbolic")
+        else:
+            entry.set_icon_from_icon_name(Gtk.EntryIconPosition.SECONDARY, "visibility-symbolic")
 
     def on_checkbox_toggled(self, widget):
         self.is_checked = widget.get_active()
