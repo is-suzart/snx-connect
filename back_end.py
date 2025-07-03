@@ -88,6 +88,14 @@ class VpnManager:
             "snx_installed": shutil.which("snx") is not None,
             "pkexec_installed": shutil.which("pkexec") is not None,
         }
+    
+    def set_keep_routes(self, keep):
+        """Sets whether to keep routes on disconnect."""
+        data = self.utils.read_json()
+        print(f"Setting keep routes to: {keep}")
+        data["keepAddress"] = keep
+        self.utils.write_json(data)
+        self.logger.info(f"Keep routes set to: {keep}")
 
     def install_snx(self):
         """Attempts to install SNX using the local script. Synchronous."""
@@ -183,6 +191,13 @@ class VpnManager:
             
         # Persist data if requested
         self._update_connection_data(self.server, self.username, self.password, self.keep_info)
+        
+        config = self.utils.read_json()
+        if config.get("keepAddress", False):
+            self.logger.info("Keeping routes on disconnect as per user settings.")
+            self._auto_add_saved_routes()
+        else:
+            self.logger.info("Not keeping routes on disconnect as per user settings.")
             
         return {"status": True, "office_ip": self.office_mode_ip}
         
@@ -196,6 +211,30 @@ class VpnManager:
             data["password"] = password
             data["keepinfo"] = True
         self.utils.write_json(data)
+    
+    def _auto_add_saved_routes(self):
+        """Internal method to add all saved routes after connecting."""
+        if not self.office_mode_ip:
+            self.logger.error("Cannot auto-add routes, Office Mode IP is not available.")
+            return
+
+        routes_data = self.utils.read_json()
+        commands = []
+        for key, value in routes_data.items():
+            if key.endswith("Address") and isinstance(value, list):
+                for ip in value:
+                    commands.append(f"ip route add {ip} via {self.office_mode_ip}")
+        
+        if commands:
+            self.logger.info("Executing auto-add route script.")
+            try:
+                self._run_privileged_commands(commands)
+                self.logger.info("Successfully auto-added saved routes.")
+            except VpnError as e:
+                # Log the error but don't crash the connection process
+                self.logger.error(f"Failed to auto-add routes: {e}")
+        else:
+            self.logger.info("No saved routes to auto-add.")
         
     # --- Disconnection Logic ---
     def disconnect(self):

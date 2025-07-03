@@ -16,17 +16,18 @@ class Application(Adw.Application):
 
     def do_startup(self):
         Adw.Application.do_startup(self)
-        provider = Gtk.CssProvider()
+        css_provider = Gtk.CssProvider()
         try:
-            provider.load_from_path('style.css')
-            Gtk.StyleContext.add_provider_for_display(
-                Gdk.Display.get_default(),
-                provider,
-                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-            )
-            print("CSS customizado carregado com sucesso.")
+            css_provider.load_from_path("style.css")
+            print("Carregando CSS personalizado...")
         except Exception as e:
             print(f"Erro ao carregar CSS: {e}")
+        
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(),
+            css_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
 
     def on_activate(self, app):
         self.win = MainWindow(application=app, controller=self.controller)

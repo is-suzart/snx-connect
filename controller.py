@@ -62,6 +62,14 @@ class Controller:
         """Handles the user's request to disconnect."""
         self.logger.info("Disconnect requested.")
         self._run_in_thread(self.model.disconnect, on_success, on_error)
+    
+    def on_keep_routes_check_toggled (self, widget):
+        """
+        Handles the toggling of the 'keep routes' checkbox.
+        This is called from the View when the user changes the state of the checkbox.
+        """
+        self.logger.info(f"Keep routes checkbox toggled: {widget.get_active()}")
+        self.model.set_keep_routes(widget.get_active())
 
     def request_load_routes(self, view):
         """

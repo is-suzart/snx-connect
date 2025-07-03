@@ -6,6 +6,7 @@ from gi.repository import Gtk, Adw
 from .login_view import LoginView
 from .routes_view import RoutesView
 from .widgets import ThemeSwitcher # <-- A IMPORTAÇÃO FOI CORRIGIDA AQUI
+from back_end import Utils
 
 import gettext
 _ = gettext.gettext
@@ -13,12 +14,14 @@ _ = gettext.gettext
 class MainWindow(Gtk.ApplicationWindow):
     def __init__(self, controller, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        utils = Utils()
         self.controller = controller
         self.set_default_size(450, 550)
 
         self.create_header_menu()
         self.set_titlebar(self.header)
-
+        self.set_css_name("main-window")
+        self.set_name("main-window")
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         main_box.append(self.stack)
@@ -59,11 +62,19 @@ class MainWindow(Gtk.ApplicationWindow):
 
         content_box.append(Gtk.Separator())
         
+        json = Utils().read_json()
+        if json.get("keepAddress", False):
+            self.keep_routes_check = Gtk.CheckButton(label=_("Keep routes on exit"), active=True)
+        else:
+            self.keep_routes_check = Gtk.CheckButton(label=_("Keep routes on exit"), active=False)
         check_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12, margin_start=12, margin_end=12)
         check_label = Gtk.Label(label=_("Save routes on exit"), xalign=0)
         self.keep_routes_check = Gtk.CheckButton()
         check_box.append(check_label)
         check_box.append(self.keep_routes_check)
+        check_box.set_margin_top(12)
+        check_box.set_margin_bottom(12)
+        self.keep_routes_check.connect("toggled", self.controller.on_keep_routes_check_toggled)
         content_box.append(check_box)
 
         content_box.append(Gtk.Separator())

@@ -26,8 +26,13 @@
 }
 
 /* Estilo para quando um botão está selecionado (:checked) */
-.themeselector checkbutton:checked {
-    border-color: @theme_selected_bg_color; /* Usa a cor de destaque do tema Adwaita */
+/* .themeselector checkbutton:checked {
+    border-color: @theme_selected_bg_color; 
+} */
+
+.main-window {
+    background-color: #f4f5f7; /* Cor de fundo da janela principal */
+    border: 1px solid #e70000; /* Borda sutil para a janela */
 }
 
 /* Esconde o indicador de radio/check padrão do GTK */
