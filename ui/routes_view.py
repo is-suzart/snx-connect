@@ -143,6 +143,16 @@ class RoutesView(Gtk.Box):
             on_success=route_row.on_remove_success,
             on_error=route_row.on_remove_error
         )
+    
+    def clear_routes_list(self):
+        """Remove todas as rotas da lista visual."""
+        # Itera sobre os filhos da ListBox e os remove um por um
+        # É mais seguro fazer isso em um loop while, pois a lista muda a cada remoção
+        child = self.routes_listbox.get_first_child()
+        while child:
+            self.routes_listbox.remove(child)
+            child = self.routes_listbox.get_first_child()
+        print("Lista de rotas visuais foi limpa.")
 
     # Callbacks que são chamados pela thread do Controller
     def handle_route_add_success(self, status, addresses):

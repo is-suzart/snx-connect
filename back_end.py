@@ -93,7 +93,7 @@ class VpnManager:
         """Sets whether to keep routes on disconnect."""
         data = self.utils.read_json()
         print(f"Setting keep routes to: {keep}")
-        data["keepAddress"] = keep
+        data["keepAddr"] = keep
         self.utils.write_json(data)
         self.logger.info(f"Keep routes set to: {keep}")
 
@@ -193,7 +193,7 @@ class VpnManager:
         self._update_connection_data(self.server, self.username, self.password, self.keep_info)
         
         config = self.utils.read_json()
-        if config.get("keepAddress", False):
+        if config.get("keepAddr", False):
             self.logger.info("Keeping routes on disconnect as per user settings.")
             self._auto_add_saved_routes()
         else:
@@ -266,8 +266,8 @@ class VpnManager:
                 "password": data.get("password"),
                 "keepinfo": True
             }
-            if data.get("keepAddress", False):
-                final_data["keepAddress"] = True
+            if data.get("keepAddr", False):
+                final_data["keepAddr"] = True
                 for key, value in data.items():
                     if key.endswith("Address"):
                         final_data[key] = value

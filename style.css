@@ -5,11 +5,16 @@
     background-color: #f4f5f7;
 }
 
+window {
+    border: 1px solid red !important;
+}
+
 /* --- Estilo para o Seletor de Tema (Com Seletores Corrigidos) --- */
 /* O container que segura os botões de tema */
 .themeselector {
     padding: 3px;
-    border-radius: 99px; /* Arredonda as bordas do container */
+    border-radius: 99px;
+    /* Arredonda as bordas do container */
     background-color: alpha(currentColor, 0.05);
 }
 
@@ -21,8 +26,10 @@
     min-height: 28px;
     min-width: 28px;
     background-clip: content-box;
-    border-radius: 9999px; /* Faz o botão ser um círculo perfeito */
-    border: 2px solid transparent; /* Borda invisível para manter o tamanho */
+    border-radius: 9999px;
+    /* Faz o botão ser um círculo perfeito */
+    border: 2px solid transparent;
+    /* Borda invisível para manter o tamanho */
 }
 
 /* Estilo para quando um botão está selecionado (:checked) */
@@ -31,35 +38,57 @@
 } */
 
 .main-window {
-    background-color: #f4f5f7; /* Cor de fundo da janela principal */
-    border: 1px solid #e70000; /* Borda sutil para a janela */
+    background-color: #f4f5f7;
+    /* Cor de fundo da janela principal */
+    border: 1px solid #e70000;
+    /* Borda sutil para a janela */
 }
 
-/* Esconde o indicador de radio/check padrão do GTK */
-.themeselector checkbutton > check {
-    -gtk-icon-source: none;
-    min-width: 0;
-    min-height: 0;
-    padding: 0;
-    border: none;
-    background: none;
-}
+/* --- Estilo para o Seletor de Tema (Baseado no GNOME Text Editor) --- */
+        .themeselector {
+            padding: 3px;
+            border-radius: 99px;
+            background-color: alpha(currentColor, 0.05);
+        }
 
-/* Define a aparência de cada botão individualmente */
-.themeselector checkbutton.follow {
-    background-image: linear-gradient(to bottom right, white 49.99%, #303030 50.01%);
-    border-color: alpha(currentColor, 0.2);
-}
+        .themeselector checkbutton.theme-button {
+            padding: 1px;
+            min-height: 44px;
+            min-width: 44px;
+            background-clip: content-box;
+            border-radius: 9999px;
+            /* Usa box-shadow para a borda, como na referência */
+            box-shadow: inset 0 0 0 1px @borders;
+        }
+        
+        /* Usa box-shadow para o estado selecionado, como na referência */
+        .themeselector checkbutton.theme-button:checked {
+            box-shadow: inset 0 0 0 2px @theme_selected_bg_color; 
+        }
 
-.themeselector checkbutton.light {
-    background-color: white;
-    border-color: alpha(currentColor, 0.2);
-}
+        /* Esconde o indicador de check padrão */
+        .themeselector checkbutton.theme-button > check {
+            -gtk-icon-source: none;
+            border: none;
+            background: none;
+            box-shadow: none;
+            min-width: 0;
+            min-height: 0;
+            padding: 0;
+        }
 
-.themeselector checkbutton.dark {
-    background-color: #303030;
-    border-color: alpha(currentColor, 0.2);
-}
+        /* Usa as cores e a imagem da referência */
+        .themeselector checkbutton.theme-button.follow {
+            background-image: linear-gradient(to bottom right, #fff 49.99%, #202020 50.01%);
+        }
+
+        .themeselector checkbutton.theme-button.light {
+            background-color: #fff;
+        }
+
+        .themeselector checkbutton.theme-button.dark {
+            background-color: #202020;
+        }
 
 /* --- Outros Estilos --- */
 .connect-button {

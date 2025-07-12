@@ -39,7 +39,7 @@ class LoginView(Gtk.Box):
             input_purpose=Gtk.InputPurpose.PASSWORD,
         )
         self.password_entry.set_icon_from_icon_name(
-            Gtk.EntryIconPosition.SECONDARY, "visibility-off-symbolic"
+            Gtk.EntryIconPosition.SECONDARY, "visibility-symbolic"
         )
         self.password_entry.set_icon_activatable(Gtk.EntryIconPosition.SECONDARY, True)
         # Conecta o clique do ícone à nossa função de callback

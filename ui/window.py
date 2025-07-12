@@ -56,14 +56,14 @@ class MainWindow(Gtk.ApplicationWindow):
         
         theme_switcher = ThemeSwitcher(self.get_application()) 
         
-        theme_switcher_box.append(theme_label)
+        #theme_switcher_box.append(theme_label)
         theme_switcher_box.append(theme_switcher)
         content_box.append(theme_switcher_box)
 
         content_box.append(Gtk.Separator())
         
         json = Utils().read_json()
-        if json.get("keepAddress", False):
+        if json.get("keepAddr", False):
             self.keep_routes_check = Gtk.CheckButton(label=_("Keep routes on exit"), active=True)
         else:
             self.keep_routes_check = Gtk.CheckButton(label=_("Keep routes on exit"), active=False)
@@ -106,6 +106,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def on_disconnect_success(self, message):
         self.menu_button.set_sensitive(True)
+        self.routes_view.clear_routes_list()
         self.show_login_view()
 
     def on_disconnect_error(self, error_message):
