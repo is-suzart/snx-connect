@@ -176,18 +176,20 @@ class VpnManager:
         finally:
             if 'child' in locals() and child.isalive():
                 child.close()
-                
+
+
     def get_ip_and_connect(self,output,ip):
         if not ip:
             pattern = r"Mode IP\s+:\s+([0-9\.]+)"
             match = re.search(pattern, output)
             if not match:
                 raise ConnectionError("Office Mode IP not found in SNX output.")
+            else:
+                self.office_mode_ip = match.group(1).strip()
+                self.logger.info(f"Office Mode IP obtained: {self.office_mode_ip}")
         else:
             match = ip
-        if not self.office_mode_ip:
-            self.office_mode_ip = match.group(1).strip()
-            self.logger.info(f"Office Mode IP obtained: {self.office_mode_ip}")
+            self.office_mode_ip = ip
             
         # Persist data if requested
         self._update_connection_data(self.server, self.username, self.password, self.keep_info)
@@ -224,8 +226,10 @@ class VpnManager:
             if key.endswith("Address") and isinstance(value, list):
                 for ip in value:
                     commands.append(f"ip route add {ip} via {self.office_mode_ip}")
+        print(commands)
         
         if commands:
+            commands.append("sysctl -w net.ipv6.conf.all.disable_ipv6=1")
             self.logger.info("Executing auto-add route script.")
             try:
                 self._run_privileged_commands(commands)
@@ -341,6 +345,7 @@ class VpnManager:
         routes = self.get_saved_routes()
         commands = [f"ip route del {route['ip']} via {self.office_mode_ip}" for route in routes]
         if commands:
+            commands.append("sysctl -w net.ipv6.conf.all.disable_ipv6=0")
             try:
                 self._run_privileged_commands(commands)
             except Exception as e:
