@@ -104,3 +104,11 @@ class Controller:
         """Handles the request to install SNX."""
         self.logger.info("SNX installation requested.")
         self._run_in_thread(self.model.install_snx, on_success, on_error)
+    
+    def get_keep_routes_status(self):
+        """Pede ao Model o estado atual da configuração 'keepAddress'."""
+        return self.model.get_keep_routes_status()
+
+    def set_keep_routes_status(self, status):
+        """Pede ao Model para salvar o novo estado da configuração 'keepAddress'."""
+        self.model.set_keep_routes(status)

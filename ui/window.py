@@ -61,20 +61,19 @@ class MainWindow(Gtk.ApplicationWindow):
         content_box.append(theme_switcher_box)
 
         content_box.append(Gtk.Separator())
-        
-        json = Utils().read_json()
-        if json.get("keepAddr", False):
-            self.keep_routes_check = Gtk.CheckButton(label=_("Keep routes on exit"), active=True)
-        else:
-            self.keep_routes_check = Gtk.CheckButton(label=_("Keep routes on exit"), active=False)
         check_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12, margin_start=12, margin_end=12)
-        check_label = Gtk.Label(label=_("Save routes on exit"), xalign=0)
-        self.keep_routes_check = Gtk.CheckButton()
+        check_label = Gtk.Label(label=_("Save routes on exit"), xalign=0, hexpand=True)
+        self.keep_routes_check = Gtk.Switch()
+        self.keep_routes_check.set_valign(Gtk.Align.CENTER)
+        
+        # Conecta o sinal e GUARDA O ID do manipulador
+        self.keep_routes_handler_id = self.keep_routes_check.connect("notify::active", self.on_keep_routes_toggled)
+
         check_box.append(check_label)
         check_box.append(self.keep_routes_check)
+
         check_box.set_margin_top(12)
         check_box.set_margin_bottom(12)
-        self.keep_routes_check.connect("toggled", self.controller.on_keep_routes_check_toggled)
         content_box.append(check_box)
 
         content_box.append(Gtk.Separator())
@@ -108,6 +107,13 @@ class MainWindow(Gtk.ApplicationWindow):
         self.menu_button.set_sensitive(True)
         self.routes_view.clear_routes_list()
         self.show_login_view()
+
+    def on_keep_routes_toggled(self, switch, gparam):
+        """Chamado quando o usuário clica no switch 'Save routes on exit'."""
+        is_active = switch.get_active()
+        # Notifica o controller sobre a mudança de estado para que ele possa salvar.
+        self.controller.set_keep_routes_status(is_active)
+
 
     def on_disconnect_error(self, error_message):
         self.menu_button.set_sensitive(True)

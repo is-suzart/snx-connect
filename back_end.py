@@ -337,6 +337,17 @@ class VpnManager:
         self.utils.write_json(data)
 
         return {"status": True}
+    
+    def get_keep_routes_status(self):
+        """Recupera o estado da configuração 'keepAddress' do arquivo JSON."""
+        return self.utils.read_json().get("keepAddress", False)
+
+    def set_keep_routes(self, keep):
+        """Define se deve manter as rotas ao desconectar."""
+        data = self.utils.read_json()
+        self.logger.info(f"Setting keep routes to: {keep}")
+        data["keepAddress"] = keep
+        self.utils.write_json(data)
         
     def _delete_saved_routes(self):
         """Internal method to delete all saved routes on disconnect."""
