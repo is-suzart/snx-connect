@@ -19,6 +19,7 @@ finish-args:
   - --device=all
   - --talk-name=org.freedesktop.PolicyKit1
   - --env=LD_LIBRARY_PATH=/app/lib/i386-linux-gnu:/app/lib
+  - --socket=session-bus
 
 modules:
   # <<< MÓDULO ATUALIZADO: Dependências Python baixadas pelo flatpak-builder >>>
@@ -51,10 +52,10 @@ modules:
   - name: snx-connect
     buildsystem: simple
     build-commands:
-      - mkdir -p /app/src
+      - mkdir -p /app/src/snx-connect
       - install -D -m 0755 snx-connect.sh /app/bin/snx-connect.sh
-      - install -D -m 0755 main.py /app/src/main.py
-      - cp -r ui back_end.py controller.py style.css /app/src/
+      - install -D -m 0755 main.py /app/src/snx-connect/main.py
+      - cp -r ui back_end.py controller.py style.css /app/src/snx-connect/
       - cp -r assets /app/src/snx-connect/
       - cp -r i18n /app/src/snx-connect/
       - cp -r bin /app/src/snx-connect/
@@ -65,8 +66,18 @@ modules:
         path: .
 
   #3. O binário SNX
-  # - name: snx-binary
-  #   buildsystem: simple
-  #   build-commands:
-      #- sh /app/share/snx-connect/bin/snx_install_linux30.sh
-      #- chmod +s /usr/bin/snx
+  - name: snx-binary
+    buildsystem: simple
+    build-commands:
+      # 1. Extrai os binários que estão escondidos dentro do script .sh
+      - tail -n +80 ./bin/snx_install_linux30.sh | bunzip2 -c - | tar xf -
+      # 2. Instala os ficheiros manualmente com as permissões corretas
+      #    Nota: Dentro do Flatpak, /usr/bin é mapeado para /app/bin
+      - install --mode=u=rxs,g=x,o=x snx /app/bin/snx
+      - install --mode=u=rx,g=rx,o=rx snx_uninstall.sh /app/bin/snx_uninstall
+      #    Nota: Dentro do Flatpak, /etc é mapeado para /app/etc
+      - install --directory --mode=u=rwx /app/etc/snx
+      - install --directory --mode=u=rwx /app/etc/snx/tmp
+    sources:
+      - type: dir
+        path: .

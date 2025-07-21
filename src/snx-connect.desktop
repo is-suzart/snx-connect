@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SNX Connect
+Comment=Cliente de VPN para Check Point SNX
+# O comando agora aponta para o nosso script wrapper que será instalado em /usr/bin
+Exec=snx-connect-gui
+# O ícone agora usa apenas o nome, que o sistema encontrará
+Icon=snx-connect-gui
+Terminal=false
+Categories=Network;RemoteAccess;
+StartupNotify=true
+Name[pt_BR]=SNX Connect
+Comment[pt_BR]=Cliente de VPN para Check Point SNX
