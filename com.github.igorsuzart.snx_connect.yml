@@ -22,14 +22,7 @@ finish-args:
 
 modules:
   # <<< MÓDULO ATUALIZADO: Dependências Python baixadas pelo flatpak-builder >>>
-  - name: pexpect
-    buildsystem: simple
-    sources:
-      - type: archive
-        url: https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz
-        sha256: ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f
-    build-commands:
-      - pip3 install --no-deps --no-use-pep517 --prefix=${FLATPAK_DEST} .
+  - python3-requirements.json
 
   # <<< MÓDULO ATUALIZADO: Instala a libstdc++5 a partir do .deb local >>>
   - name: libstdc++5
