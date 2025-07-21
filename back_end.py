@@ -8,6 +8,8 @@ import logging
 import shutil
 import pexpect
 import sys
+import ipaddress # <<< MÓDULO IMPORTADO PARA VALIDAÇÃO DE IP
+
 
 # --- Exceções Customizadas ---
 # É uma boa prática criar exceções específicas para o seu domínio.
@@ -295,14 +297,20 @@ class VpnManager:
             raise RouteError("Cannot add route: Office Mode IP is not set.")
         
         try:
-            process = subprocess.run(
-                f"nslookup {domain}", shell=True, capture_output=True, text=True, check=True
-            )
-            addresses = self.utils.extract_ip_addresses(process.stdout.splitlines())
-            if not addresses:
-                raise RouteError(f"No valid IPv4 addresses found for {domain}.")
-        except subprocess.CalledProcessError:
-            raise RouteError(f"Failed to resolve domain: {domain}")
+            ip = ipaddress.ip_address(domain)
+            self.logger.info(f"Input '{domain}' is a valid IP address.")
+            addresses = [str(ip)] # Usa o próprio IP como o endereço a ser adicionado
+        except:
+            self.logger.info(f"Input '{domain}' is not an IP, treating as a domain.")
+            try:
+                process = subprocess.run(
+                    f"nslookup {domain}", shell=True, capture_output=True, text=True, check=True
+                )
+                addresses = self.utils.extract_ip_addresses(process.stdout.splitlines())
+                if not addresses:
+                    raise RouteError(f"No valid IPv4 addresses found for {domain}.")
+            except subprocess.CalledProcessError:
+                raise RouteError(f"Failed to resolve domain: {domain}")
             
         commands = [f"ip route add {addr} via {self.office_mode_ip}" for addr in addresses]
         self._run_privileged_commands(commands)

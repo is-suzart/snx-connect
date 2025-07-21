@@ -41,7 +41,8 @@ class MainWindow(Gtk.ApplicationWindow):
     def create_header_menu(self):
         """Cria o MenuButton e seu Popover com as opções."""
         self.header = Adw.HeaderBar()
-        self.header.set_title_widget(Adw.WindowTitle(title="SNX Connect"))
+        self.title_widget = Adw.WindowTitle(title="", subtitle="")
+        self.header.set_title_widget(self.title_widget)
 
         popover = Gtk.Popover()
         menu_button = Gtk.MenuButton(icon_name="view-more-symbolic", popover=popover)
@@ -85,13 +86,13 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def show_routes_view(self, widget, office_ip):
         self.stack.set_visible_child_name("routes")
-        self.header.get_title_widget().set_subtitle(_("Connected"))
+        self.header.get_title_widget().set_title(_("Connected"))
         self.menu_button.set_visible(True)
         self.controller.request_load_routes(self.routes_view)
 
     def show_login_view(self, widget=None):
         self.stack.set_visible_child_name("login")
-        self.header.get_title_widget().set_subtitle(_("Login"))
+        self.title_widget.set_title(_("Login"))
         self.menu_button.set_visible(False)
 
     def on_disconnect_clicked(self, widget):

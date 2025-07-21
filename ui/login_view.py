@@ -28,8 +28,12 @@ class LoginView(Gtk.Box):
         self.set_margin_start(24)
         self.set_margin_end(24)
 
-        project_logo = Gtk.Image.new_from_file("./assets/logo.png")
-        project_logo.set_pixel_size(150)
+        project_logo = Gtk.Image.new_from_file("./assets/snx-connect.png")
+        project_logo.set_halign(Gtk.Align.CENTER)
+        # light_logo = project_logo.scheme_preference("light")
+        # light_logo.add_css_class()
+        project_logo.add_css_class("logo")
+        project_logo.set_pixel_size(75)
 
         self.website_entry = Gtk.Entry(placeholder_text=_("Site address"))
         self.user_entry = Gtk.Entry(placeholder_text=_("Your username"))
@@ -61,7 +65,15 @@ class LoginView(Gtk.Box):
             self.password_entry.set_text(data.get("password", ""))
             self.keep_info_check.set_active(True)
 
+        title_label = Gtk.Label()
+        title_label.set_label("SNX Connect")
+        title_label.set_halign(Gtk.Align.CENTER)
+        title_label.set_margin_top(12)
+        title_label.add_css_class("title-2") # Usa a classe de estilo do Adwaita
+
         self.append(project_logo)
+        self.append(title_label)
+
         self.append(Gtk.Separator(height_request=10, opacity=0))
         self.append(Gtk.Label(label=_("Site"), xalign=0))
         self.append(self.website_entry)
