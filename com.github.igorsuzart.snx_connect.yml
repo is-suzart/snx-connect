@@ -1,0 +1,79 @@
+# com.github.igorsuzart.snx_connect.yml
+app-id: com.github.igorsuzart.snx_connect
+runtime: org.gnome.Platform
+runtime-version: '47' # Versão estável do GNOME runtime com GTK4
+sdk: org.gnome.Sdk
+add-extensions:
+  org.freedesktop.Platform.Compat.i386:
+    directory: lib/i386-linux-gnu
+    version: '24.08'
+  
+command: snx-connect.sh
+finish-args:
+  # Permissões da Sandbox
+  - --allow=multiarch
+  - --share=network
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=all
+  - --talk-name=org.freedesktop.PolicyKit1
+  - --env=LD_LIBRARY_PATH=/app/lib/i386-linux-gnu:/app/lib
+
+modules:
+  # <<< MÓDULO ATUALIZADO: Dependências Python baixadas pelo flatpak-builder >>>
+  - name: pexpect
+    buildsystem: simple
+    sources:
+      - type: archive
+        url: https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz
+        sha256: ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f
+    build-commands:
+      - pip3 install --no-deps --no-use-pep517 --prefix=${FLATPAK_DEST} .
+
+  # <<< MÓDULO ATUALIZADO: Instala a libstdc++5 a partir do .deb local >>>
+  - name: libstdc++5
+    buildsystem: simple
+    build-commands:
+      - ar x libstdc++5*.deb
+      - tar -xvf data.tar.xz ./usr/lib/i386-linux-gnu/libstdc++.so.5.0.7 ./usr/lib/i386-linux-gnu/libstdc++.so.5
+      - install -D -m 0755 usr/lib/i386-linux-gnu/libstdc++.so.5.0.7 /app/lib/i386-linux-gnu/libstdc++.so.5.0.7
+      - install -D -m 0644 usr/lib/i386-linux-gnu/libstdc++.so.5 /app/lib/i386-linux-gnu/libstdc++.so.5
+    sources:
+      - type: file
+        path: bin/libstdc++5_3.3.6-28ubuntu1_i386.deb
+
+  # <<< MÓDULO ATUALIZADO: Instala o nslookup a partir do .deb local >>>
+  - name: nslookup
+    buildsystem: simple
+    build-commands:
+      - ar x bind9*.deb
+      - tar -xvf data.tar.xz ./usr/bin/nslookup
+      - install -D -m 0755 usr/bin/nslookup /app/bin/nslookup
+    sources:
+      - type: file
+        path: bin/bind9-dnsutils_9.20.11-1_amd64.deb
+
+  # 2. O código da sua aplicação
+  - name: snx-connect
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/src
+      - install -D -m 0755 snx-connect.sh /app/bin/snx-connect.sh
+      - install -D -m 0755 main.py /app/src/main.py
+      - cp -r ui back_end.py controller.py style.css /app/src/
+      - cp -r assets /app/src/snx-connect/
+      - cp -r i18n /app/src/snx-connect/
+      - cp -r bin /app/src/snx-connect/
+      - install -D -m 0644 snx-connect.desktop /app/src/applications/com.github.igorsuzart.snx_connect.desktop
+      - install -D -m 0644 assets/snx-icon.png /app/src/icons/hicolor/128x128/apps/com.github.igorsuzart.snx_connect.png
+    sources:
+      - type: dir
+        path: .
+
+  #3. O binário SNX
+  # - name: snx-binary
+  #   buildsystem: simple
+  #   build-commands:
+      #- sh /app/share/snx-connect/bin/snx_install_linux30.sh
+      #- chmod +s /usr/bin/snx

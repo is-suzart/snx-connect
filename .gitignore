@@ -1,1 +1,5 @@
 /snx-data.json
+/bin
+/build-dir
+/repo
+/.flatpak-builder
