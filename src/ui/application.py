@@ -18,7 +18,7 @@ class Application(Adw.Application):
         Adw.Application.do_startup(self)
         css_provider = Gtk.CssProvider()
         try:
-            css_provider.load_from_path("src/style.css")
+            css_provider.load_from_path("./../style.css")
             print("Carregando CSS personalizado...")
         except Exception as e:
             print(f"Erro ao carregar CSS: {e}")

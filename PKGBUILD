@@ -46,7 +46,10 @@ package() {
     install -d "$pkgdir/opt/$pkgname"
     cp -r ui back_end.py controller.py main.py style.css "$pkgdir/opt/$pkgname/"
 
-    cp bin/libstdc* "$pkgdir/usr/lib32/"
+    
+    install -d "$pkgdir/usr/lib32"
+    install -m755 "bin/libstdc++.so.5.0.7" "$pkgdir/usr/lib32"
+    ln -sf "bin/libstdc++.so.5.0.7" "$pkgdir/usr/lib/libstdc++.so.5"
 
     # 2. Instalar assets, ícones e traduções
     install -d "$pkgdir/opt/$pkgname/assets"
