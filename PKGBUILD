@@ -23,6 +23,8 @@ depends=(
 depends_x86_64=(
     'lib32-gcc-libs' # Fornece a libstdc++.so.5
     'lib32-glibc'
+    'lib32-libx11'
+    'lib32-pam'
 )
 
 # --- FONTE ---
