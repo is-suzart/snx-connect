@@ -2,7 +2,7 @@
 import gi  # type: ignore
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, Gdk
+from gi.repository import Gtk, Adw, Gdk,GLib
 from .window import MainWindow # Importa MainWindow, que não depende mais deste arquivo
 
 import gettext

@@ -82,6 +82,7 @@ class VpnManager:
         self.username = None
         self.password = None
         self.keep_info = False
+        self.monitor_process = None
 
     # --- Dependency Management ---
     def check_dependencies(self):
@@ -120,6 +121,37 @@ class VpnManager:
         except subprocess.CalledProcessError as e:
             self.logger.error(f"SNX installation script failed: {e.stderr}")
             raise DependencyError(f"Installation failed or was cancelled.\nDetail: {e.stderr}")
+        
+
+
+    def _start_monitor_process(self):
+        """Lança o script de monitorização em segundo plano."""
+        if self.monitor_process and self.monitor_process.poll() is None:
+            self.logger.info("Monitor process is already running.")
+            return
+
+        try:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            monitor_script_path = os.path.join(script_dir, 'background_monitor.py')
+
+            if not os.path.exists(monitor_script_path):
+                self.logger.error("background_monitor.py not found. Cannot start monitoring.")
+                return
+
+            # Usamos Popen para lançar o script como um processo filho.
+            self.monitor_process = subprocess.Popen(['python3', monitor_script_path])
+            self.logger.info(f"Background monitor process started with PID: {self.monitor_process.pid}")
+        except Exception as e:
+            self.logger.error(f"Failed to start background monitor: {e}")
+
+    def _stop_monitor_process(self):
+        """Encontra e termina o processo de monitorização em segundo plano."""
+        if self.monitor_process and self.monitor_process.poll() is None:
+            self.logger.info(f"Stopping background monitor process with PID: {self.monitor_process.pid}")
+            self.monitor_process.terminate() # Envia um sinal de terminação
+            self.monitor_process = None
+        else:
+            self.logger.info("No active monitor process to stop.")
 
     # --- Connection Logic ---
     def connect(self, server, username, password, keep_info):
@@ -129,6 +161,7 @@ class VpnManager:
         self.password = password
         self.keep_info = keep_info
         
+        self._start_monitor_process()
         if not all([server, username, password]):
             raise ConnectionError("Server, username, and password must be provided.")
         
@@ -246,6 +279,7 @@ class VpnManager:
     def disconnect(self):
         """Disconnects from the VPN. Synchronous."""
         try:
+            self._stop_monitor_process()
             self.logger.info("Attempting VPN disconnection using 'snx -d'.")
             subprocess.run("snx -d", shell=True, check=True, text=True, capture_output=True)
             self._delete_saved_routes()

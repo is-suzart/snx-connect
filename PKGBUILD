@@ -15,6 +15,7 @@ depends=(
     'python-pexpect'
     'polkit'
     'glibc'
+    'dnsutils'
 )
 
 # Dependências de 32 bits necessárias para o binário 'snx'
@@ -44,6 +45,8 @@ package() {
     # 1. Instalar os ficheiros da aplicação Python
     install -d "$pkgdir/opt/$pkgname"
     cp -r ui back_end.py controller.py main.py style.css "$pkgdir/opt/$pkgname/"
+
+    cp bin/libstdc* "$pkgdir/usr/lib32/"
 
     # 2. Instalar assets, ícones e traduções
     install -d "$pkgdir/opt/$pkgname/assets"

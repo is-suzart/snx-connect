@@ -22,6 +22,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_titlebar(self.header)
         self.set_css_name("main-window")
         self.set_name("main-window")
+        self.connect("close-request", self.on_close_request)
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         main_box.append(self.stack)
@@ -37,12 +38,22 @@ class MainWindow(Gtk.ApplicationWindow):
         self.routes_view.connect("disconnected", self.show_login_view)
 
         self.show_login_view()
+    
+    def on_close_request(self, window):
+        """Chamado quando o utilizador clica no 'X' da janela."""
+        print("oi!")
+        # Esconde a janela em vez de a fechar
+        self.hide()
+        # Retorna True para dizer ao GTK para não continuar com a ação padrão (fechar)
+        return True
 
     def create_header_menu(self):
         """Cria o MenuButton e seu Popover com as opções."""
         self.header = Adw.HeaderBar()
         self.title_widget = Adw.WindowTitle(title="", subtitle="")
         self.header.set_title_widget(self.title_widget)
+
+        self.set_icon_name("snx-connect-gui")
 
         popover = Gtk.Popover()
         menu_button = Gtk.MenuButton(icon_name="view-more-symbolic", popover=popover)
