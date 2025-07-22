@@ -4,6 +4,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Gtk, Adw, Gdk,GLib
 from .window import MainWindow # Importa MainWindow, que não depende mais deste arquivo
+import os
 
 import gettext
 _ = gettext.gettext
@@ -18,8 +19,10 @@ class Application(Adw.Application):
         Adw.Application.do_startup(self)
         css_provider = Gtk.CssProvider()
         try:
-            css_provider.load_from_path("./style.css")
-            print("Carregando CSS personalizado...")
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            css_path = os.path.join(base_dir, "style.css")
+            css_provider.load_from_path(css_path)
+            print(f"Carregando CSS personalizado de: {css_path}")
         except Exception as e:
             print(f"Erro ao carregar CSS: {e}")
         

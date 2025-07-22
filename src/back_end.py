@@ -199,7 +199,7 @@ class VpnManager:
         except pexpect.exceptions.EOF:
             output = child.before
             if "Another session" in output:
-                storage_ip = self.utils.read_json()['ip']
+                storage_ip = self.utils.read_json().get('ip')
                 if storage_ip:
                     self.office_mode_ip = storage_ip
                     self.logger.info(f"Using stored Office Mode IP: {self.office_mode_ip}")
