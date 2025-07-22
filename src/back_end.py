@@ -181,7 +181,7 @@ class VpnManager:
                     raise ConnectionError("Connection denied by SNX. Check your credentials or server settings.")
                 elif child_index == 0: # 'Office'
                     self.logger.info("Accepted connection request.")
-                    result = self.get_ip_and_connect(child.buffer)
+                    result = self.get_ip_and_connect(child.buffer,None)
                     return result
                     
             elif index == 2: # EOF
