@@ -44,12 +44,15 @@ package() {
 
     # 1. Instalar os ficheiros da aplicação Python
     install -d "$pkgdir/opt/$pkgname"
-    cp -r ui back_end.py controller.py main.py style.css "$pkgdir/opt/$pkgname/"
-
+    install -m644 main.py "$pkgdir/opt/$pkgname/"
+    install -m644 back_end.py "$pkgdir/opt/$pkgname/"
+    install -m644 controller.py "$pkgdir/opt/$pkgname/"
+    install -m644 style.css "$pkgdir/opt/$pkgname/"
+    cp -r ui "$pkgdir/opt/$pkgname/" # Pastas podem ser copiadas com cp
     
     install -d "$pkgdir/usr/lib32"
     install -m755 "bin/libstdc++.so.5.0.7" "$pkgdir/usr/lib32"
-    ln -sf "bin/libstdc++.so.5.0.7" "$pkgdir/usr/lib/libstdc++.so.5"
+    ln -sf "bin/libstdc++.so.5.0.7" "$pkgdir/usr/lib32/libstdc++.so.5"
 
     # 2. Instalar assets, ícones e traduções
     install -d "$pkgdir/opt/$pkgname/assets"
