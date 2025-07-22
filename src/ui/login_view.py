@@ -28,7 +28,7 @@ class LoginView(Gtk.Box):
         self.set_margin_start(24)
         self.set_margin_end(24)
 
-        project_logo = Gtk.Image.new_from_file("./assets/snx-connect.png")
+        project_logo = Gtk.Image.new_from_file("./src/assets/snx-connect.png")
         project_logo.set_halign(Gtk.Align.CENTER)
         # light_logo = project_logo.scheme_preference("light")
         # light_logo.add_css_class()

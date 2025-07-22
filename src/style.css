@@ -94,11 +94,11 @@
 
 /* --- Outros Estilos --- */
 .connect-button {
-    background-color: #2E8B57;
+    background: linear-gradient( 105.9deg,  #007ab8 24.4%, #2e00b8e0 80.5% );
     color: white;
     font-weight: bold;
     border-radius: 12px;
-    padding: 6px 12px;
+    padding: 6px 24px;
 }
 
 button.flat {
