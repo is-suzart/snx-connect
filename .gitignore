@@ -4,3 +4,8 @@
 /repo
 /.flatpak-builder
 /pkg
+/deb/usr
+/deb/opt
+deb
+
+snx-connect-gui*
