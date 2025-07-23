@@ -4,7 +4,11 @@
 
 <p align="center"> A modern, simple, and elegant GTK4/Libadwaita GUI client for the Check Point SNX VPN, designed for Linux desktops. </p>
 
-<p align="center"> <img src="[https://img.shields.io/badge/python-3.10+-blue.svg](https://img.shields.io/badge/python-3.10+-blue.svg "null")" alt="Python Version"> <img src="[https://img.shields.io/badge/license-GPLv3-blue.svg](https://img.shields.io/badge/license-GPLv3-blue.svg "null")" alt="License"> <img src="[https://img.shields.io/badge/status-active-success.svg](https://img.shields.io/badge/status-active-success.svg "null")" alt="Project Status"> </p>
+<p align="center">
+<img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python Version">
+<img src="https://img.shields.io/badge/license-GPLv3-blue.svg" alt="License">
+<img src="https://img.shields.io/badge/status-active-success.svg" alt="Project Status">
+</p>
 
 <!-- Suggestion: Add a screenshot of your app here! -->
 
